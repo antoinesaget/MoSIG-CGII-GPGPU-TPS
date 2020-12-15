@@ -67,6 +67,17 @@ void setupFileMenu(QMenuBar* myMenuBar, glShaderWindow* glWindow, QApplication *
     fileMenu->addAction(quitAction);
 }
 
+void setupDebugMenu(QMenuBar* myMenuBar, glShaderWindow* glWindow, QApplication *myApp)
+{
+    QMenu* debugMenu = myMenuBar->addMenu(myMenuBar->tr("&Debug"));
+
+    // Refresh shaders button + shortcut
+    QAction* refreshShadersAction = new QAction(myMenuBar->tr("&Refresh shaders"), debugMenu);
+    refreshShadersAction->setShortcuts(QKeySequence::Refresh);
+    refreshShadersAction->setStatusTip(myMenuBar->tr("&Reload every shaders."));
+    glWindow->connect(refreshShadersAction, SIGNAL(triggered()), glWindow, SLOT(refreshShaders()));
+    debugMenu->addAction(refreshShadersAction);
+}
 void setupWindowMenu(QMenuBar* myMenuBar, glShaderWindow* glWindow)
 {
     QMenu* sizeMenu = myMenuBar->addMenu(myMenuBar->tr("&Window size"));
@@ -172,6 +183,7 @@ int main( int argc, char* argv[] )
     setupFileMenu(menuBar, window, &app);
     setupWindowMenu(menuBar, window);
     setupShaderMenu(menuBar, window);
+    setupDebugMenu(menuBar, window, &app);
     QWidget* aux = window->makeAuxWindow();
     aux->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 

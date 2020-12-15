@@ -116,6 +116,9 @@ void glShaderWindow::openSceneFromFile() {
     }
 }
 
+void glShaderWindow::refreshShaders() {
+    setShader(currentShaderName);
+}
 void glShaderWindow::openNewTexture() {
     QFileDialog dialog(0, "Open texture image", workingDirectory + "../textures/", "*.png *.PNG *.jpg *.JPG *.tif *.TIF");
     dialog.setAcceptMode(QFileDialog::AcceptOpen);

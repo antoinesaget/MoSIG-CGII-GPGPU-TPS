@@ -49,6 +49,7 @@ public slots:
     void updateShininess(int shininessSliderValue);
     void updateEta(int etaSliderValue);
 
+    void refreshShaders();
 protected:
     void mousePressEvent(QMouseEvent *e);
     void mouseMoveEvent(QMouseEvent *e);
