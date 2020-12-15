@@ -31,6 +31,8 @@ public:
     inline const QStringList& fragShaderSuffix() { return m_fragShaderSuffix;};
     inline const QStringList& vertShaderSuffix() { return m_vertShaderSuffix;};
 
+    QString currentShaderName;
+
 public slots:
     void openSceneFromFile();
     void openNewTexture();
