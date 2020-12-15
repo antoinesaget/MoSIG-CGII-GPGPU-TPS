@@ -26,9 +26,9 @@ glShaderWindow::glShaderWindow(QWindow *parent)
       g_vertices(0), g_normals(0), g_texcoords(0), g_colors(0), g_indices(0),
       gpgpu_vertices(0), gpgpu_normals(0), gpgpu_texcoords(0), gpgpu_colors(0), gpgpu_indices(0),
       environmentMap(0), texture(0), permTexture(0), pixels(0), mouseButton(Qt::NoButton), auxWidget(0),
-      isGPGPU(false), hasComputeShaders(false), blinnPhong(true), transparent(true), eta(1.5), lightIntensity(1.0f), shininess(50.0f), lightDistance(5.0f), groundDistance(0.78),
+      isGPGPU(false), hasComputeShaders(false), blinnPhong(true), transparent(true), eta(1.5), lightIntensity(1.0f), shininess(50.0f), lightDistance(2.0f), groundDistance(0.78),
       shadowMap_fboId(0), shadowMap_rboId(0), shadowMap_textureId(0), fullScreenSnapshots(false), computeResult(0), 
-      m_indexBuffer(QOpenGLBuffer::IndexBuffer), ground_indexBuffer(QOpenGLBuffer::IndexBuffer)
+      m_indexBuffer(QOpenGLBuffer::IndexBuffer), ground_indexBuffer(QOpenGLBuffer::IndexBuffer), is_lightpos_overlay(false), lightpos_overlay_program(0), ground_level(0)
 {
     // Default values you might want to tinker with
     shadowMapDimension = 2048;
@@ -37,6 +37,7 @@ glShaderWindow::glShaderWindow(QWindow *parent)
     compute_groupsize_y = 8;
 
     m_fragShaderSuffix << "*.frag" << "*.fs";
+    m_geomShaderSuffix << "*.geom" << "*.gm";
     m_vertShaderSuffix << "*.vert" << "*.vs";
     m_compShaderSuffix << "*.comp" << "*.cs";
 }
@@ -51,6 +52,10 @@ glShaderWindow::~glShaderWindow()
     if (ground_program) {
         ground_program->release();
         delete ground_program;
+    }
+    if (lightpos_overlay_program) {
+        lightpos_overlay_program->release();
+        delete lightpos_overlay_program;
     }
     if (shadowMapGenerationProgram) {
         shadowMapGenerationProgram->release();
@@ -118,6 +123,11 @@ void glShaderWindow::openSceneFromFile() {
 
 void glShaderWindow::refreshShaders() {
     setShader(currentShaderName);
+}
+
+void glShaderWindow::toggleLightPosShader() {
+    is_lightpos_overlay = !is_lightpos_overlay;
+    renderNow();
 }
 
 void glShaderWindow::openNewTexture() {
@@ -470,6 +480,8 @@ void glShaderWindow::bindSceneToProgram()
             g_texcoords[p] = trimesh::vec2(rad * cos(theta), rad * sin(theta));
         }
     }
+    ground_level = g_vertices[0][1];
+
     ground_vertexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
     ground_vertexBuffer.bind();
     ground_vertexBuffer.allocate(g_vertices, g_numPoints * sizeof(trimesh::point));
@@ -668,7 +680,10 @@ void glShaderWindow::setShader(const QString& shader)
             computeShader = shaderPath + str;
         }
     }
+    
     m_program = prepareShaderProgram(vertexShader, fragmentShader);
+    lightpos_overlay_program = prepareShaderProgramGeometry(vertexShader, shaderPath + "lightpos.geom", shaderPath + "lightpos.frag");
+
     if (computeShader.length() > 0) {
     	compute_program = prepareComputeProgram(computeShader);
         if (compute_program) createSSBO();
@@ -832,6 +847,13 @@ void glShaderWindow::initialize()
         ground_program->release();
         delete(ground_program);
     }
+
+    if (lightpos_overlay_program) {
+        lightpos_overlay_program->release();
+        delete(lightpos_overlay_program);
+    }
+    lightpos_overlay_program = prepareShaderProgramGeometry(shaderPath + "1_simple.vert", shaderPath + "lightpos.geom", shaderPath + "lightpos.frag");
+
     ground_program = prepareShaderProgram(shaderPath + "3_textured.vert", shaderPath + "3_textured.frag");
     if (shadowMapGenerationProgram) {
         shadowMapGenerationProgram->release();
@@ -919,6 +941,17 @@ QOpenGLShaderProgram* glShaderWindow::prepareShaderProgram(const QString& vertex
     if ( !result )
         qWarning() << program->log();
     result = program->link();
+    if ( !result )
+        qWarning() << program->log();
+    return program;
+}
+
+QOpenGLShaderProgram* glShaderWindow::prepareShaderProgramGeometry(const QString& vertexShaderPath, const QString& geometryShaderPath,
+                                           const QString& fragmentShaderPath)
+{
+    QOpenGLShaderProgram* program = prepareShaderProgram(vertexShaderPath, fragmentShaderPath);
+
+    bool result = program->addShaderFromSourceFile(QOpenGLShader::Geometry, geometryShaderPath);
     if ( !result )
         qWarning() << program->log();
     return program;
@@ -1052,11 +1085,9 @@ static int nextPower2(int x) {
     return x;
 }
 
-
-
 void glShaderWindow::render()
 {
-    QVector3D lightPosition = m_matrix[1] * (m_center + lightDistance * modelMesh->bsphere.r * QVector3D(0.5, 0.5, 1));
+    QVector3D lightPosition = m_matrix[1] * (m_center + lightDistance * modelMesh->bsphere.r * QVector3D(1, 1, 1));
 
     QMatrix4x4 lightCoordMatrix;
     QMatrix4x4 lightPerspective;
@@ -1169,6 +1200,25 @@ void glShaderWindow::render()
     m_vao.release();
     m_program->release();
 
+    if(is_lightpos_overlay) {
+        // If the light position debug overlay is set, pass only the minimum informations to the program (lightposition + matrices)
+
+        lightpos_overlay_program->bind();
+        if (!isGPGPU) {
+            lightpos_overlay_program->setUniformValue("matrix", m_matrix[0]);
+            lightpos_overlay_program->setUniformValue("perspective", m_perspective);
+        }
+        lightpos_overlay_program->setUniformValue("lightPosition", lightPosition);
+        lightpos_overlay_program->setUniformValue("ground_level", ground_level);
+
+        // Bad trick to call the geometry shader once (the points doesn't matter here as the geometry will be generated from the lightPosition uniform variable).
+        m_vao.bind();
+        glDrawElements(GL_POINTS, 1, GL_UNSIGNED_INT, 0);
+        m_vao.release();
+
+        lightpos_overlay_program->release();
+    }
+    
     if (!isGPGPU) {
         // also draw the ground, with a different shader program
         ground_program->bind();

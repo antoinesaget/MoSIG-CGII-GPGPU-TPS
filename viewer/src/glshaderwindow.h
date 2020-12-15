@@ -31,8 +31,6 @@ public:
     inline const QStringList& fragShaderSuffix() { return m_fragShaderSuffix;};
     inline const QStringList& vertShaderSuffix() { return m_vertShaderSuffix;};
 
-    QString currentShaderName;
-
 public slots:
     void openSceneFromFile();
     void openNewTexture();
@@ -52,6 +50,7 @@ public slots:
     void updateEta(int etaSliderValue);
 
     void refreshShaders();
+    void toggleLightPosShader();
 protected:
     void mousePressEvent(QMouseEvent *e);
     void mouseMoveEvent(QMouseEvent *e);
@@ -63,6 +62,8 @@ protected:
 
 private:
     QOpenGLShaderProgram* prepareShaderProgram(const QString& vertexShaderPath, const QString& fragmentShaderPath);
+    QOpenGLShaderProgram* prepareShaderProgramGeometry(const QString& vertexShaderPath, const QString& geometryShaderPath, const QString& fragmentShaderPath);
+
     QOpenGLShaderProgram* prepareComputeProgram(const QString& computeShaderPath);
     void createSSBO();
     void bindSceneToProgram();
@@ -73,6 +74,11 @@ private:
     void mouseToTrackball(QVector2D &in, QVector3D &out);
 
     QString currentShaderName;
+    
+    // Are we using any debug overlay?
+    bool is_lightpos_overlay;
+    float ground_level;
+
     // Are we using GPGPU?
     bool isGPGPU;
     // Are we using compute shaders?
@@ -114,6 +120,8 @@ private:
 
     // OpenGL variables encapsulated by Qt
     QOpenGLShaderProgram *m_program;
+    QOpenGLShaderProgram *lightpos_overlay_program;
+
     QOpenGLShaderProgram *ground_program;
     QOpenGLShaderProgram *compute_program;
     QOpenGLShaderProgram *shadowMapGenerationProgram;
@@ -150,6 +158,7 @@ private:
     // User interface variables
     bool fullScreenSnapshots;
     QStringList m_fragShaderSuffix;
+    QStringList m_geomShaderSuffix;
     QStringList m_vertShaderSuffix;
     QStringList m_compShaderSuffix;
     QVector2D lastMousePosition;

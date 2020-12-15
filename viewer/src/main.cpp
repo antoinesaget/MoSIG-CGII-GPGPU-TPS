@@ -77,7 +77,15 @@ void setupDebugMenu(QMenuBar* myMenuBar, glShaderWindow* glWindow, QApplication 
     refreshShadersAction->setStatusTip(myMenuBar->tr("&Reload every shaders."));
     glWindow->connect(refreshShadersAction, SIGNAL(triggered()), glWindow, SLOT(refreshShaders()));
     debugMenu->addAction(refreshShadersAction);
+
+    // Toggle lighpos visualization
+    QAction* toggleLightPosAction = new QAction(myMenuBar->tr("&Light positions visualization"), debugMenu);
+    toggleLightPosAction->setCheckable(true);
+    toggleLightPosAction->setStatusTip(myMenuBar->tr("&Enable the lightpos.geom and lightpos.frag shaders on top of the current shaders."));
+    glWindow->connect(toggleLightPosAction, SIGNAL(changed()), glWindow, SLOT(toggleLightPosShader()));
+    debugMenu->addAction(toggleLightPosAction);
 }
+
 void setupWindowMenu(QMenuBar* myMenuBar, glShaderWindow* glWindow)
 {
     QMenu* sizeMenu = myMenuBar->addMenu(myMenuBar->tr("&Window size"));
