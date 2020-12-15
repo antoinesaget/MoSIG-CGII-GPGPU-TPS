@@ -72,6 +72,7 @@ private:
     void openScene();
     void mouseToTrackball(QVector2D &in, QVector3D &out);
 
+    QString currentShaderName;
     // Are we using GPGPU?
     bool isGPGPU;
     // Are we using compute shaders?
