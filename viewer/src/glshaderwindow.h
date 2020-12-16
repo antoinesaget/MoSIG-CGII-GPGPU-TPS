@@ -50,6 +50,7 @@ public slots:
     void updateLightIntensity(int lightSliderValue);
     void updateShininess(int shininessSliderValue);
     void updateEta(int etaSliderValue);
+    void updateEtak(int etakSliderValue);
 
     void refreshShaders();
     void toggleLightPosShader();
@@ -125,6 +126,7 @@ private:
     bool blinnPhong;
     bool transparent;
     float eta;
+    float etak;
     float lightIntensity;
     float shininess;
     float lightDistance;

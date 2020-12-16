@@ -4,6 +4,7 @@ uniform float lightIntensity;
 uniform bool blinnPhong;
 uniform float shininess;
 uniform float eta;
+uniform float etak; // Imaginary part when eta is complex
 uniform sampler2D shadowMap;
 
 in vec4 eyeVector;
@@ -23,9 +24,11 @@ There are many ways to compute the fresnel coefficient:
      - eta_in = 1 with air/other interface lead to simplifications
      - It can be a simple float or a vec3 depending if we want to apply the same coefficient to each color channel or not
 
-In the following sections, few functions are given for computing fresnel coefficients, the code and formulas are inspired from : 
+In the following sections, few functions are given for computing fresnel coefficients, the code and formulas are inspired from: 
      - The class / TP notes
      - This website : https://seblagarde.wordpress.com/2013/04/29/memo-on-fresnel-equations/#more-1921
+
+Note: The eta_in, eta_out notation might be confusing, eta_out is the index of refraction of the material we are entering/bouncing of off and eta_in is the index of refraction of the medium.
 */
 
 /*
@@ -44,6 +47,33 @@ float fresnel_real(vec4 half, vec4 outVect, float eta) {
      float F = (Fs + Fp) / 2.0;
 	return F;
 }
+
+/*
+This function is taken from https://seblagarde.wordpress.com/2013/04/29/memo-on-fresnel-equations/#more-1921
+It return a single float and take a single complex eta (separated in eta the real part and etak the imaginary part) and cosTheta as parameters.
+Here, for the function to work, eta + i*etak must be eta_out/eta_in + i*(etak_out/eta_in) 
+*/
+float fresnel_dieletric_conductor(float eta, float etak, float cosTheta)
+{  
+   float CosTheta2 = cosTheta * cosTheta;
+   float SinTheta2 = 1.0 - CosTheta2;
+   float Eta2 = eta * eta;
+   float Etak2 = etak * etak;
+
+   float t0 = Eta2 - Etak2 - SinTheta2;
+   float a2plusb2 = sqrt(t0 * t0 + 4.0 * Eta2 * Etak2);
+   float t1 = a2plusb2 + CosTheta2;
+   float a = sqrt(0.5f * (a2plusb2 + t0));
+   float t2 = 2 * a * cosTheta;
+   float Rs = (t1 - t2) / (t1 + t2);
+
+   float t3 = CosTheta2 * a2plusb2 + SinTheta2 * SinTheta2;
+   float t4 = t2 * SinTheta2;   
+   float Rp = Rs * (t3 - t4) / (t3 + t4);
+
+   return 0.5 * (Rp + Rs);
+}
+
 // -----------------------------------------
 
 vec4 getAmbiant(float k, vec4 C, float I) {
@@ -65,6 +95,19 @@ vec4 getSpecular_EtaReal_Phong_Fresnel(vec4 C, float I, vec4 n, vec4 L, vec4 V, 
      return F * C * pow(max(dot(n, H), 0.0), exponent) * I;
 }
 
+/*
+Return the specular component for Blinn-Phong shading with a fresnel coefficient with a complex eta (a metal).
+*/
+vec4 getSpecular_EtaComplex_Phong_Fresnel(vec4 C, float I, vec4 n, vec4 L, vec4 V, float eta_in, float eta_out, float etak_out, float exponent) {
+     float eta = eta_out / eta_in;
+     float etak = etak_out / eta_in;
+     
+     vec4 H = normalize(V + L);
+     float F = fresnel_dieletric_conductor(eta, etak, dot(H, L));
+
+     return F * C * pow(max(dot(n, H), 0.0), exponent) * I;
+}
+
 void main( void )
 {
      vec4 C = vertColor;
@@ -82,7 +125,8 @@ void main( void )
      vec4 diffuse = getDiffuse(kD, C, lightIntensity, n, L);
      
      // Specular
-     vec4 specular = getSpecular_EtaReal_Phong_Fresnel(C, lightIntensity, n, L, V, 1.0, eta, shininess);
+     // vec4 specular = getSpecular_EtaReal_Phong_Fresnel(C, lightIntensity, n, L, V, 1.0, eta, shininess);
+     vec4 specular = getSpecular_EtaComplex_Phong_Fresnel(C, lightIntensity, n, L, V, 1.0, eta, etak, shininess);
      
      vec4 finalColor = ambiant + diffuse + specular;
      fragColor = finalColor;

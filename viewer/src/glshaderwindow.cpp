@@ -26,7 +26,7 @@ glShaderWindow::glShaderWindow(QWindow *parent)
       g_vertices(0), g_normals(0), g_texcoords(0), g_colors(0), g_indices(0),
       gpgpu_vertices(0), gpgpu_normals(0), gpgpu_texcoords(0), gpgpu_colors(0), gpgpu_indices(0),
       environmentMap(0), texture(0), permTexture(0), pixels(0), mouseButton(Qt::NoButton), auxWidget(0),
-      isGPGPU(false), hasComputeShaders(false), blinnPhong(true), transparent(true), eta(1.5), lightIntensity(1.0f), shininess(50.0f), lightDistance(2.0f), groundDistance(0.78),
+      isGPGPU(false), hasComputeShaders(false), blinnPhong(true), transparent(true), eta(1.5), etak(0.0), lightIntensity(1.0f), shininess(50.0f), lightDistance(2.0f), groundDistance(0.78),
       shadowMap_fboId(0), shadowMap_rboId(0), shadowMap_textureId(0), fullScreenSnapshots(false), computeResult(0), 
       m_indexBuffer(QOpenGLBuffer::IndexBuffer), ground_indexBuffer(QOpenGLBuffer::IndexBuffer), 
       is_lightpos_overlay(false), lightpos_overlay_program(0), ground_level(0),
@@ -263,6 +263,12 @@ void glShaderWindow::updateEta(int etaSliderValue)
     renderNow();
 }
 
+void glShaderWindow::updateEtak(int etakSliderValue)
+{
+    etak = etakSliderValue/100.0;
+    renderNow();
+}
+
 void glShaderWindow::updateNormalLength(int normalLengthSliderValue)
 {
     debug_normal_length = normalLengthSliderValue / 100.0;
@@ -357,6 +363,24 @@ QWidget *glShaderWindow::makeAuxWindow()
     hboxEta->addWidget(etaLabelValue);
     outer->addLayout(hboxEta);
     outer->addWidget(etaSlider);
+
+    // Etak slider
+    QSlider* etakSlider = new QSlider(Qt::Horizontal);
+    etakSlider->setTickPosition(QSlider::TicksBelow);
+    etakSlider->setTickInterval(100);
+    etakSlider->setMinimum(0);
+    etakSlider->setMaximum(500);
+    etakSlider->setSliderPosition(etak*100);
+    connect(etakSlider,SIGNAL(valueChanged(int)),this,SLOT(updateEtak(int)));
+    QLabel* etakLabel = new QLabel("Etak (imaginary part) * 100 =");
+    QLabel* etakLabelValue = new QLabel();
+    etakLabelValue->setNum(etak * 100);
+    connect(etakSlider,SIGNAL(valueChanged(int)),etakLabelValue,SLOT(setNum(int)));
+    QHBoxLayout *hboxEtak= new QHBoxLayout;
+    hboxEtak->addWidget(etakLabel);
+    hboxEtak->addWidget(etakLabelValue);
+    outer->addLayout(hboxEtak);
+    outer->addWidget(etakSlider);
 
     auxWidget->setLayout(outer);
     return auxWidget;
@@ -1163,6 +1187,7 @@ void glShaderWindow::set_uniforms(QOpenGLShaderProgram *program, QMatrix4x4 mat_
     program->setUniformValue("lightIntensity", lightIntensity);
     program->setUniformValue("shininess", shininess);
     program->setUniformValue("eta", eta);
+    program->setUniformValue("etak", etak);
     program->setUniformValue("radius", modelMesh->bsphere.r);
     program->setUniformValue("normalLength", debug_normal_length);
 	if (program->uniformLocation("colorTexture") != -1) program->setUniformValue("colorTexture", 0);
