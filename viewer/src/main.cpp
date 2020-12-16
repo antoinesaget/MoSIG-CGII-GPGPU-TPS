@@ -84,6 +84,13 @@ void setupDebugMenu(QMenuBar* myMenuBar, glShaderWindow* glWindow, QApplication 
     toggleLightPosAction->setStatusTip(myMenuBar->tr("&Enable the lightpos.geom and lightpos.frag shaders on top of the current shaders."));
     glWindow->connect(toggleLightPosAction, SIGNAL(changed()), glWindow, SLOT(toggleLightPosShader()));
     debugMenu->addAction(toggleLightPosAction);
+
+    // Toggle debug geometry shader for normal visualization
+    QAction* toggleDebugGeomAction = new QAction(myMenuBar->tr("&Debug geometry shader"), debugMenu);
+    toggleDebugGeomAction->setCheckable(true);
+    toggleDebugGeomAction->setStatusTip(myMenuBar->tr("&Enable the debug.geom and debug.frag shader on top of the current shaders."));
+    glWindow->connect(toggleDebugGeomAction, SIGNAL(changed()), glWindow, SLOT(toggleDebugGeomShader()));
+    debugMenu->addAction(toggleDebugGeomAction);
 }
 
 void setupWindowMenu(QMenuBar* myMenuBar, glShaderWindow* glWindow)

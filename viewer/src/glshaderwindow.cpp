@@ -28,7 +28,9 @@ glShaderWindow::glShaderWindow(QWindow *parent)
       environmentMap(0), texture(0), permTexture(0), pixels(0), mouseButton(Qt::NoButton), auxWidget(0),
       isGPGPU(false), hasComputeShaders(false), blinnPhong(true), transparent(true), eta(1.5), lightIntensity(1.0f), shininess(50.0f), lightDistance(2.0f), groundDistance(0.78),
       shadowMap_fboId(0), shadowMap_rboId(0), shadowMap_textureId(0), fullScreenSnapshots(false), computeResult(0), 
-      m_indexBuffer(QOpenGLBuffer::IndexBuffer), ground_indexBuffer(QOpenGLBuffer::IndexBuffer), is_lightpos_overlay(false), lightpos_overlay_program(0), ground_level(0)
+      m_indexBuffer(QOpenGLBuffer::IndexBuffer), ground_indexBuffer(QOpenGLBuffer::IndexBuffer), 
+      is_lightpos_overlay(false), lightpos_overlay_program(0), ground_level(0),
+      is_debug_overlay(false) ,debug_overlay_program(0), debug_normal_length(0.5)
 {
     // Default values you might want to tinker with
     shadowMapDimension = 2048;
@@ -40,6 +42,21 @@ glShaderWindow::glShaderWindow(QWindow *parent)
     m_geomShaderSuffix << "*.geom" << "*.gm";
     m_vertShaderSuffix << "*.vert" << "*.vs";
     m_compShaderSuffix << "*.comp" << "*.cs";
+
+    // Debug normal length slider (is activated when enabling the debug geometry shader)
+    normal_length_slider = new QSlider(Qt::Horizontal);
+    normal_length_slider->setTickPosition(QSlider::TicksBelow);
+    normal_length_slider->setMinimum(0);
+    normal_length_slider->setMaximum(100);
+    normal_length_slider->setSliderPosition(50);
+    connect(normal_length_slider,SIGNAL(valueChanged(int)),this,SLOT(updateNormalLength(int)));
+    QLabel* normal_length_label = new QLabel("Debug normal length = ");
+    QLabel* normal_length_label_value = new QLabel();
+    normal_length_label_value->setNum(50);
+    connect(normal_length_slider,SIGNAL(valueChanged(int)),normal_length_label_value,SLOT(setNum(int)));
+    hbox_normal_length= new QHBoxLayout;
+    hbox_normal_length->addWidget(normal_length_label);
+    hbox_normal_length->addWidget(normal_length_label_value);
 }
 
 glShaderWindow::~glShaderWindow()
@@ -56,6 +73,10 @@ glShaderWindow::~glShaderWindow()
     if (lightpos_overlay_program) {
         lightpos_overlay_program->release();
         delete lightpos_overlay_program;
+    }
+    if (debug_overlay_program) {
+        debug_overlay_program->release();
+        delete debug_overlay_program;
     }
     if (shadowMapGenerationProgram) {
         shadowMapGenerationProgram->release();
@@ -127,6 +148,22 @@ void glShaderWindow::refreshShaders() {
 
 void glShaderWindow::toggleLightPosShader() {
     is_lightpos_overlay = !is_lightpos_overlay;
+    renderNow();
+}
+
+void glShaderWindow::toggleDebugGeomShader() {
+    is_debug_overlay = !is_debug_overlay;
+
+    QVBoxLayout* outer = (QVBoxLayout*) (auxWidget->layout());
+
+    if(is_debug_overlay) {
+        outer->addLayout(hbox_normal_length);
+        outer->addWidget(normal_length_slider);
+    } else {
+        outer->removeItem(hbox_normal_length);
+        outer->removeWidget(normal_length_slider);
+    }
+
     renderNow();
 }
 
@@ -223,6 +260,12 @@ void glShaderWindow::updateShininess(int shininessSliderValue)
 void glShaderWindow::updateEta(int etaSliderValue)
 {
     eta = etaSliderValue/100.0;
+    renderNow();
+}
+
+void glShaderWindow::updateNormalLength(int normalLengthSliderValue)
+{
+    debug_normal_length = normalLengthSliderValue / 100.0;
     renderNow();
 }
 
@@ -341,6 +384,35 @@ void glShaderWindow::createSSBO()
 #endif
 }
 
+void glShaderWindow::bindProgram(QOpenGLShaderProgram *program) 
+{
+    program->bind();
+    // Enable the "vertex" attribute to bind it to our vertex buffer
+    m_vertexBuffer.bind();
+    program->setAttributeBuffer( "vertex", GL_FLOAT, 0, 4 );
+    program->enableAttributeArray( "vertex" );
+
+    // Enable the "color" attribute to bind it to our colors buffer
+    if (modelMesh->colors.size() > 0) {
+        m_colorBuffer.bind();
+        program->setAttributeBuffer( "color", GL_FLOAT, 0, 4 );
+        program->enableAttributeArray( "color" );
+        program->setUniformValue("noColor", false);
+    } else {
+        program->setUniformValue("noColor", true);
+    }
+    m_normalBuffer.bind();
+    program->setAttributeBuffer( "normal", GL_FLOAT, 0, 4 );
+    program->enableAttributeArray( "normal" );
+
+    if ((modelMesh->texcoords.size() > 0) || isGPGPU){
+        m_texcoordBuffer.bind();
+        program->setAttributeBuffer( "texcoords", GL_FLOAT, 0, 2 );
+        program->enableAttributeArray( "texcoords" );
+    }
+    program->release();
+}
+
 void glShaderWindow::bindSceneToProgram()
 {
     // Now create the VAO for the model
@@ -405,31 +477,10 @@ void glShaderWindow::bindSceneToProgram()
         if (!isGPGPU) m_texcoordBuffer.allocate(&(modelMesh->texcoords.front()), modelMesh->texcoords.size() * sizeof(trimesh::vec2));
         else m_texcoordBuffer.allocate(gpgpu_texcoords, 4 * sizeof(trimesh::vec2));
     }
-    m_program->bind();
-    // Enable the "vertex" attribute to bind it to our vertex buffer
-    m_vertexBuffer.bind();
-    m_program->setAttributeBuffer( "vertex", GL_FLOAT, 0, 4 );
-    m_program->enableAttributeArray( "vertex" );
 
-    // Enable the "color" attribute to bind it to our colors buffer
-    if (modelMesh->colors.size() > 0) {
-        m_colorBuffer.bind();
-        m_program->setAttributeBuffer( "color", GL_FLOAT, 0, 4 );
-        m_program->enableAttributeArray( "color" );
-        m_program->setUniformValue("noColor", false);
-    } else {
-        m_program->setUniformValue("noColor", true);
-    }
-    m_normalBuffer.bind();
-    m_program->setAttributeBuffer( "normal", GL_FLOAT, 0, 4 );
-    m_program->enableAttributeArray( "normal" );
-
-    if ((modelMesh->texcoords.size() > 0) || isGPGPU){
-        m_texcoordBuffer.bind();
-        m_program->setAttributeBuffer( "texcoords", GL_FLOAT, 0, 2 );
-        m_program->enableAttributeArray( "texcoords" );
-    }
-    m_program->release();
+    bindProgram(m_program);
+    bindProgram(debug_overlay_program);
+        
     shadowMapGenerationProgram->bind();
     // Enable the "vertex" attribute to bind it to our vertex buffer
     m_vertexBuffer.bind();
@@ -683,6 +734,7 @@ void glShaderWindow::setShader(const QString& shader)
     
     m_program = prepareShaderProgram(vertexShader, fragmentShader);
     lightpos_overlay_program = prepareShaderProgramGeometry(vertexShader, shaderPath + "lightpos.geom", shaderPath + "lightpos.frag");
+    debug_overlay_program = prepareShaderProgramGeometry(vertexShader, shaderPath + "debug.geom", shaderPath + "debug.frag");
 
     if (computeShader.length() > 0) {
     	compute_program = prepareComputeProgram(computeShader);
@@ -853,6 +905,12 @@ void glShaderWindow::initialize()
         delete(lightpos_overlay_program);
     }
     lightpos_overlay_program = prepareShaderProgramGeometry(shaderPath + "1_simple.vert", shaderPath + "lightpos.geom", shaderPath + "lightpos.frag");
+
+    if (debug_overlay_program) {
+        debug_overlay_program->release();
+        delete(debug_overlay_program);
+    }
+    debug_overlay_program= prepareShaderProgramGeometry(shaderPath + "1_simple.vert", shaderPath + "debug.geom", shaderPath + "debug.frag");
 
     ground_program = prepareShaderProgram(shaderPath + "3_textured.vert", shaderPath + "3_textured.frag");
     if (shadowMapGenerationProgram) {
@@ -1085,6 +1143,43 @@ static int nextPower2(int x) {
     return x;
 }
 
+void glShaderWindow::set_uniforms(QOpenGLShaderProgram *program, QMatrix4x4 mat_inverse, QMatrix4x4 persp_inverse, QVector3D lightPosition) {
+    program->bind();
+    if (isGPGPU) {
+        program->setUniformValue("computeResult", 2);
+        program->setUniformValue("center", m_center);
+        program->setUniformValue("mat_inverse", mat_inverse);
+        program->setUniformValue("persp_inverse", persp_inverse);
+    } else {
+        program->setUniformValue("matrix", m_matrix[0]);
+        program->setUniformValue("perspective", m_perspective);
+        program->setUniformValue("lightMatrix", m_matrix[1]);
+        program->setUniformValue("normalMatrix", m_matrix[0].normalMatrix());
+    }
+    program->setUniformValue("lightPosition", lightPosition);
+    program->setUniformValue("lightIntensity", 1.0f);
+    program->setUniformValue("blinnPhong", blinnPhong);
+    program->setUniformValue("transparent", transparent);
+    program->setUniformValue("lightIntensity", lightIntensity);
+    program->setUniformValue("shininess", shininess);
+    program->setUniformValue("eta", eta);
+    program->setUniformValue("radius", modelMesh->bsphere.r);
+    program->setUniformValue("normalLength", debug_normal_length);
+	if (program->uniformLocation("colorTexture") != -1) program->setUniformValue("colorTexture", 0);
+    if (program->uniformLocation("envMap") != -1)  program->setUniformValue("envMap", 1);
+	else if (program->uniformLocation("permTexture") != -1)  program->setUniformValue("permTexture", 1);
+    // Shadow Mapping
+    if (program->uniformLocation("shadowMap") != -1) {
+        program->setUniformValue("shadowMap", 2);
+        // TODO_shadowMapping: send the right transform here
+    }
+
+    m_vao.bind();
+    glDrawElements(GL_TRIANGLES, 3 * m_numFaces, GL_UNSIGNED_INT, 0);
+    m_vao.release();
+    program->release();
+}
+
 void glShaderWindow::render()
 {
     QVector3D lightPosition = m_matrix[1] * (m_center + lightDistance * modelMesh->bsphere.r * QVector3D(1, 1, 1));
@@ -1163,43 +1258,16 @@ void glShaderWindow::render()
         glCullFace (GL_BACK); // cull back face
 		glBindTexture(GL_TEXTURE_2D, shadowMap_textureId);
     }
-    m_program->bind();
+
     const qreal retinaScale = devicePixelRatio();
     glViewport(0, 0, width() * retinaScale, height() * retinaScale);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    if (isGPGPU) {
-        m_program->setUniformValue("computeResult", 2);
-        m_program->setUniformValue("center", m_center);
-        m_program->setUniformValue("mat_inverse", mat_inverse);
-        m_program->setUniformValue("persp_inverse", persp_inverse);
-    } else {
-        m_program->setUniformValue("matrix", m_matrix[0]);
-        m_program->setUniformValue("perspective", m_perspective);
-        m_program->setUniformValue("lightMatrix", m_matrix[1]);
-        m_program->setUniformValue("normalMatrix", m_matrix[0].normalMatrix());
+    
+    set_uniforms(m_program, mat_inverse, persp_inverse, lightPosition);
+    if(is_debug_overlay) {
+        set_uniforms(debug_overlay_program, mat_inverse, persp_inverse, lightPosition);
     }
-    m_program->setUniformValue("lightPosition", lightPosition);
-    m_program->setUniformValue("lightIntensity", 1.0f);
-    m_program->setUniformValue("blinnPhong", blinnPhong);
-    m_program->setUniformValue("transparent", transparent);
-    m_program->setUniformValue("lightIntensity", lightIntensity);
-    m_program->setUniformValue("shininess", shininess);
-    m_program->setUniformValue("eta", eta);
-    m_program->setUniformValue("radius", modelMesh->bsphere.r);
-	if (m_program->uniformLocation("colorTexture") != -1) m_program->setUniformValue("colorTexture", 0);
-    if (m_program->uniformLocation("envMap") != -1)  m_program->setUniformValue("envMap", 1);
-	else if (m_program->uniformLocation("permTexture") != -1)  m_program->setUniformValue("permTexture", 1);
-    // Shadow Mapping
-    if (m_program->uniformLocation("shadowMap") != -1) {
-        m_program->setUniformValue("shadowMap", 2);
-        // TODO_shadowMapping: send the right transform here
-    }
-
-    m_vao.bind();
-    glDrawElements(GL_TRIANGLES, 3 * m_numFaces, GL_UNSIGNED_INT, 0);
-    m_vao.release();
-    m_program->release();
-
+    
     if(is_lightpos_overlay) {
         // If the light position debug overlay is set, pass only the minimum informations to the program (lightposition + matrices)
 

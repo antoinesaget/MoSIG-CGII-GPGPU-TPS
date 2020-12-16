@@ -15,6 +15,8 @@
 #include <QtGui/QScreen>
 #include <QMouseEvent>
 
+#include <QSlider>
+#include <QHBoxLayout>
 
 class glShaderWindow : public OpenGLWindow
 {
@@ -51,6 +53,9 @@ public slots:
 
     void refreshShaders();
     void toggleLightPosShader();
+    void toggleDebugGeomShader();
+    void updateNormalLength(int normalLengthSliderValue);
+
 protected:
     void mousePressEvent(QMouseEvent *e);
     void mouseMoveEvent(QMouseEvent *e);
@@ -63,10 +68,13 @@ protected:
 private:
     QOpenGLShaderProgram* prepareShaderProgram(const QString& vertexShaderPath, const QString& fragmentShaderPath);
     QOpenGLShaderProgram* prepareShaderProgramGeometry(const QString& vertexShaderPath, const QString& geometryShaderPath, const QString& fragmentShaderPath);
+    
+    void set_uniforms(QOpenGLShaderProgram *program, QMatrix4x4 mat_inverse, QMatrix4x4 persp_inverse, QVector3D lightPosition);
 
     QOpenGLShaderProgram* prepareComputeProgram(const QString& computeShaderPath);
     void createSSBO();
     void bindSceneToProgram();
+    void bindProgram(QOpenGLShaderProgram *program);
     void initializeTransformForScene();
     void initPermTexture();
     void loadTexturesForShaders();
@@ -74,10 +82,15 @@ private:
     void mouseToTrackball(QVector2D &in, QVector3D &out);
 
     QString currentShaderName;
-    
+
     // Are we using any debug overlay?
     bool is_lightpos_overlay;
+    bool is_debug_overlay;
+
     float ground_level;
+    float debug_normal_length;
+    QSlider* normal_length_slider;
+    QHBoxLayout *hbox_normal_length;
 
     // Are we using GPGPU?
     bool isGPGPU;
@@ -121,6 +134,7 @@ private:
     // OpenGL variables encapsulated by Qt
     QOpenGLShaderProgram *m_program;
     QOpenGLShaderProgram *lightpos_overlay_program;
+    QOpenGLShaderProgram *debug_overlay_program;
 
     QOpenGLShaderProgram *ground_program;
     QOpenGLShaderProgram *compute_program;
