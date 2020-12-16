@@ -22,10 +22,13 @@ void main( void )
 {
     if (noColor) vertColor = vec4(0.2, 0.6, 0.7, 1.0 );
     else vertColor = color;
+
     vertNormal.xyz = normalize(normalMatrix * normal.xyz);
     vertNormal.w = 0.0;
 
-    // TODO: compute eyeVector, lightVector. 
+	vec4 vertex_cameraSpace = matrix * vertex;
+	lightVector = matrix * vec4(lightPosition,1.0) - vertex_cameraSpace;
+	eyeVector = vec4(0, 0, 0, 1) - vertex_cameraSpace;
 
-    gl_Position = perspective * matrix * vertex;
+	gl_Position = perspective * vertex_cameraSpace;
 }

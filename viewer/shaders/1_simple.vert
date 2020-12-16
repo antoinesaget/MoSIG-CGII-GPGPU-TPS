@@ -16,7 +16,9 @@ void main( void )
 {
     if (noColor) vertColor = vec4(0.4, 0.2, 0.6, 1.0);
     else vertColor = color;
+
     vertNormal.xyz = normalize(normalMatrix * normal.xyz);
     vertNormal.w = 0.0;
+    
     gl_Position = perspective * matrix * vertex;
 }
