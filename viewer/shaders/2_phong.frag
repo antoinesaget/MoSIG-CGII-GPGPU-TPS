@@ -18,16 +18,24 @@ vec4 getAmbiant(float k, vec4 C, float I) {
      return k * C * I;
 }
 
+vec4 getDiffuse(float k, vec4 C, float I, vec4 n, vec4 L) {
+     return k * C * max(dot(n, L), 0.0) * I;
+}
+
 void main( void )
 {
      vec4 C = vertColor;
 
+     vec4 n = normalize(vertNormal);
+     vec4 L = normalize(lightVector);
+
      // Ambiant 
-     float kA = 1;
+     float kA = 0.2;
      vec4 ambiant = getAmbiant(kA, C, lightIntensity);
      
      // Diffuse
-     vec4 diffuse = vec4(0);
+     float kD = 0.8;
+     vec4 diffuse = getDiffuse(kD, C, lightIntensity, n, L);
      
      // Specular
      vec4 specular = vec4(0);

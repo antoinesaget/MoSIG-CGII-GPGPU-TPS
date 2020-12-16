@@ -1,11 +1,12 @@
 #version 410
 layout (triangles) in;
-layout (line_strip, max_vertices = 6) out;
+layout (line_strip, max_vertices = 12) out;
 
 uniform mat4 perspective;
 uniform float normalLength;
 
 in vec4 vertNormal[];
+in vec4 lightVector[];
 
 out vec4 vertColor;
 
@@ -27,9 +28,18 @@ void GenerateLine(int index)
     gl_Position = gl_in[index].gl_Position;
     EmitVertex();
     
-    gl_Position = gl_in[index].gl_Position + perspective * n * normalLength;
+    gl_Position = gl_in[index].gl_Position + normalize(perspective * n) * normalLength;
+    EmitVertex();    
+    EndPrimitive();
+
+	vec4 L = normalize(lightVector[index]);
+    vertColor = vec4(0.0, 0.0, 1.0, 1.0);
+
+    gl_Position = gl_in[index].gl_Position;
     EmitVertex();
     
+    gl_Position = gl_in[index].gl_Position + normalize(perspective * L) * normalLength * 5;
+    EmitVertex();    
     EndPrimitive();
 }
 
