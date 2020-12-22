@@ -56,6 +56,9 @@ public slots:
     void toggleLightPosShader();
     void toggleDebugGeomShader();
     void updateNormalLength(int normalLengthSliderValue);
+    void reflectivityClicked();
+    void edgetintClicked();
+    void toggleArtisticFresnel(bool state);
 
 protected:
     void mousePressEvent(QMouseEvent *e);
@@ -87,11 +90,15 @@ private:
     // Are we using any debug overlay?
     bool is_lightpos_overlay;
     bool is_debug_overlay;
+    bool is_using_artistic_fresnel;
 
     float ground_level;
     float debug_normal_length;
     QSlider* normal_length_slider;
     QHBoxLayout *hbox_normal_length;
+    QColor reflectivity;
+    QColor edgetint;
+
 
     // Are we using GPGPU?
     bool isGPGPU;

@@ -15,6 +15,11 @@
 #include <QHBoxLayout>
 #include <QComboBox>
 #include <QDebug>
+
+#include <QPushButton>
+#include <QColorDialog>
+#include <QCheckBox>
+
 #include <assert.h>
 
 #include "perlinNoise.h" // defines tables for Perlin Noise
@@ -30,7 +35,8 @@ glShaderWindow::glShaderWindow(QWindow *parent)
       shadowMap_fboId(0), shadowMap_rboId(0), shadowMap_textureId(0), fullScreenSnapshots(false), computeResult(0), 
       m_indexBuffer(QOpenGLBuffer::IndexBuffer), ground_indexBuffer(QOpenGLBuffer::IndexBuffer), 
       is_lightpos_overlay(false), lightpos_overlay_program(0), ground_level(0),
-      is_debug_overlay(false) ,debug_overlay_program(0), debug_normal_length(0.5)
+      is_debug_overlay(false) ,debug_overlay_program(0), debug_normal_length(0.5),
+      is_using_artistic_fresnel(false), reflectivity(Qt::white), edgetint(Qt::white)
 {
     // Default values you might want to tinker with
     shadowMapDimension = 2048;
@@ -275,6 +281,23 @@ void glShaderWindow::updateNormalLength(int normalLengthSliderValue)
     renderNow();
 }
 
+void glShaderWindow::reflectivityClicked() {
+    QColor color = QColorDialog::getColor(reflectivity, NULL, "Choose reflectivity color");
+    reflectivity = color;
+    renderNow();
+}
+
+void glShaderWindow::edgetintClicked() {
+    QColor color = QColorDialog::getColor(edgetint, NULL, "Choose edge tint color");
+    edgetint = color;
+    renderNow();
+}
+
+void glShaderWindow::toggleArtisticFresnel(bool state) {
+    is_using_artistic_fresnel = state;
+    renderNow();
+}
+
 QWidget *glShaderWindow::makeAuxWindow()
 {
     if (auxWidget)
@@ -310,6 +333,20 @@ QWidget *glShaderWindow::makeAuxWindow()
     vbox2->addWidget(transparent2);
     groupBox2->setLayout(vbox2);
     buttons->addWidget(groupBox2);
+
+    QGroupBox *groupBox3 = new QGroupBox("Colors (limited to Cook-Torrance):");
+    QCheckBox *enableArtisticFresnelButton = new QCheckBox("&Enable artistic friendly");
+    QPushButton *reflectivity = new QPushButton("&Reflectivity");
+    QPushButton *edgetint = new QPushButton("&Edge tint");
+    connect(enableArtisticFresnelButton, SIGNAL(clicked(bool)), this, SLOT(toggleArtisticFresnel(bool)));
+    connect(reflectivity, SIGNAL(clicked()), this, SLOT(reflectivityClicked()));
+    connect(edgetint, SIGNAL(clicked()), this, SLOT(edgetintClicked()));
+    QVBoxLayout *vbox3 = new QVBoxLayout;
+    vbox3->addWidget(enableArtisticFresnelButton);
+    vbox3->addWidget(reflectivity);
+    vbox3->addWidget(edgetint);
+    groupBox3->setLayout(vbox3);
+    buttons->addWidget(groupBox3);
     outer->addLayout(buttons);
 
     // light source intensity
@@ -1198,6 +1235,10 @@ void glShaderWindow::set_uniforms(QOpenGLShaderProgram *program, QMatrix4x4 mat_
         program->setUniformValue("shadowMap", 2);
         // TODO_shadowMapping: send the right transform here
     }
+
+    m_program->setUniformValue("reflectivity", reflectivity);
+    m_program->setUniformValue("edgetint", edgetint);
+    m_program->setUniformValue("is_using_artistic_fresnel", is_using_artistic_fresnel);
 
     m_vao.bind();
     glDrawElements(GL_TRIANGLES, 3 * m_numFaces, GL_UNSIGNED_INT, 0);

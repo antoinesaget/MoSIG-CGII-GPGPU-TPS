@@ -8,6 +8,10 @@ uniform float eta;
 uniform float etak; // Imaginary part when eta is complex
 uniform sampler2D shadowMap;
 
+uniform vec4 reflectivity;
+uniform vec4 edgetint;
+uniform bool is_using_artistic_fresnel;
+
 in vec4 eyeVector;
 in vec4 lightVector;
 in vec4 vertColor;
@@ -153,7 +157,7 @@ float G(float cosTheta, float roughness) {
 /*
 Return the specular component for Cook-Torrance shading with a fresnel coefficient with a triple channel complex eta.
 */
-vec4 getSpecular_EtaComplex_CookTorrance(vec4 C, float I, vec4 n, vec4 L, vec4 V, vec3 eta_in, vec3 eta_out, vec3 etak_out, float roughness) {
+vec4 getSpecular_EtaComplex_CookTorrance(vec4 n, vec4 L, vec4 V, vec3 eta_in, vec3 eta_out, vec3 etak_out, float roughness) {
      vec3 eta = eta_out / eta_in;
      vec3 etak = etak_out / eta_in;     
      
@@ -170,9 +174,38 @@ vec4 getSpecular_EtaComplex_CookTorrance(vec4 C, float I, vec4 n, vec4 L, vec4 V
      return max(F * Dh * G1i * G1o / (4 * ndotV * ndotL), 0); // max is here to prevent negative contribution to the final lighting that look odd.
 }
 
+vec3 n_min(vec3 r){
+    return (1-r)/(1+r);
+}
+
+vec3 n_max(vec3 r){
+    return (1+sqrt(r))/(1-sqrt(r)); 
+}
+
+vec3 get_n(vec3 r, vec3 g) {
+     return n_min(r)*g + (1-g)*n_max(r);
+}
+
+vec3 get_k(vec3 r, vec3 n){
+    vec3 nr = (n+1)*(n+1)*r-(n-1)*(n-1);
+    return sqrt(nr/(1-r));
+}
+
+void getEtaForArtisticFresnel(in vec3 reflectivity, in vec3 edgetint, out vec3 eta, out vec3 etak) {
+   vec3 _reflectivity = clamp(reflectivity, vec3(0), vec3(0.99));
+   eta = get_n(_reflectivity, edgetint);
+   etak = get_k(_reflectivity, eta);
+}
+
 void main( void )
 {
-     vec4 C = vertColor;
+     vec4 C = vec4(0);
+     if (is_using_artistic_fresnel) {
+          C = reflectivity;
+     } else {
+          C = vertColor;
+     }
+
      vec4 n = normalize(vertNormal);
      vec4 L = normalize(lightVector);
      vec4 V = normalize(eyeVector);
@@ -187,12 +220,20 @@ void main( void )
      
      // Specular
      // vec4 specular = getSpecular_EtaReal_Phong_Fresnel(C, lightIntensity, n, L, V, 1.0, eta, shininess);
+     
      vec4 specular = vec4(0.0);
      if (blinnPhong) {
           specular = getSpecular_EtaComplex_Phong_Fresnel(C, lightIntensity, n, L, V, 1.0, eta, etak, shininess);
      } else {
+
+          vec3 _eta = vec3(eta);
+          vec3 _etak = vec3(etak);
+          if (is_using_artistic_fresnel) {
+               getEtaForArtisticFresnel(reflectivity.xyz, edgetint.xyz, _eta, _etak);
+          }
+
           float roughness = (200 - shininess) / 200;
-          specular = getSpecular_EtaComplex_CookTorrance(C, lightIntensity, n, L, V, vec3(1.0), vec3(eta), vec3(etak), roughness);
+          specular = getSpecular_EtaComplex_CookTorrance(n, L, V, vec3(1.0), _eta, _etak, roughness);
      }
      
      vec4 finalColor = ambiant + diffuse + specular;
