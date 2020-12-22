@@ -148,7 +148,7 @@ void glShaderWindow::openSceneFromFile() {
     }
 }
 
-void glShaderWindow::refreshShaders() {
+void glShaderWindow::refreshShaders() {    
     setShader(currentShaderName);
 }
 
@@ -796,6 +796,7 @@ void glShaderWindow::setShader(const QString& shader)
     m_program = prepareShaderProgram(vertexShader, fragmentShader);
     lightpos_overlay_program = prepareShaderProgramGeometry(vertexShader, shaderPath + "lightpos.geom", shaderPath + "lightpos.frag");
     debug_overlay_program = prepareShaderProgramGeometry(vertexShader, shaderPath + "debug.geom", shaderPath + "debug.frag");
+    ground_program = prepareShaderProgram(shaderPath + "3_textured.vert", shaderPath + "3_textured.frag");
 
     if (computeShader.length() > 0) {
     	compute_program = prepareComputeProgram(computeShader);
@@ -960,6 +961,7 @@ void glShaderWindow::initialize()
         ground_program->release();
         delete(ground_program);
     }
+    ground_program = prepareShaderProgram(shaderPath + "3_textured.vert", shaderPath + "3_textured.frag");
 
     if (lightpos_overlay_program) {
         lightpos_overlay_program->release();
@@ -973,7 +975,6 @@ void glShaderWindow::initialize()
     }
     debug_overlay_program= prepareShaderProgramGeometry(shaderPath + "1_simple.vert", shaderPath + "debug.geom", shaderPath + "debug.frag");
 
-    ground_program = prepareShaderProgram(shaderPath + "3_textured.vert", shaderPath + "3_textured.frag");
     if (shadowMapGenerationProgram) {
         shadowMapGenerationProgram->release();
         delete(shadowMapGenerationProgram);
