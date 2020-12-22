@@ -15,7 +15,7 @@ in vec2 texcoords;
 // Camera-space coordinates
 out vec4 eyeVector;
 out vec4 lightVector;
-out vec4 lightSpace;
+out vec4 lightSpace; // placeholder for shadow mapping
 out vec4 vertColor;
 out vec4 vertNormal;
 out vec2 textCoords;
@@ -24,11 +24,14 @@ void main( void )
 {
     if (noColor) vertColor = vec4(0.2, 0.6, 0.7, 1.0 );
     else vertColor = color;
+
     vertNormal.xyz = normalize(normalMatrix * normal.xyz);
     vertNormal.w = 0.0;
     textCoords = texcoords;
 
-    // TODO: compute eyeVector, lightVector. 
+	vec4 vertex_cameraSpace = matrix * vertex;
+	lightVector = matrix * vec4(lightPosition,1.0) - vertex_cameraSpace;
+	eyeVector = vec4(0, 0, 0, 1) - vertex_cameraSpace;
 
-    gl_Position = perspective * matrix * vertex;
+	gl_Position = perspective * vertex_cameraSpace;
 }
