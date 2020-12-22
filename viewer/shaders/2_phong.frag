@@ -174,6 +174,8 @@ vec4 getSpecular_EtaComplex_CookTorrance(vec4 n, vec4 L, vec4 V, vec3 eta_in, ve
      return max(F * Dh * G1i * G1o / (4 * ndotV * ndotL), 0); // max is here to prevent negative contribution to the final lighting that look odd.
 }
 
+// ----- Artistic Fresnel -----
+// Taken from http://jcgt.org/published/0003/04/03/ and adapted
 vec3 n_min(vec3 r){
     return (1-r)/(1+r);
 }
@@ -196,6 +198,7 @@ void getEtaForArtisticFresnel(in vec3 reflectivity, in vec3 edgetint, out vec3 e
    eta = get_n(_reflectivity, edgetint);
    etak = get_k(_reflectivity, eta);
 }
+// -----------
 
 void main( void )
 {
