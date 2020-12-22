@@ -16,10 +16,12 @@ in vec4 position;
 
 out vec4 fragColor;
 
+// From https://en.wikipedia.org/wiki/UV_mapping
 vec4 getColorFromEnvironment(in vec3 direction)
 {
-    // TODO
-    return vec4(1);
+    vec2 uv = vec2(0.5 + atan(direction.z, direction.x)/(2*M_PI), 0.5 + asin(direction.y)/M_PI);
+    vec3 color = texture(envMap, uv).rgb;
+    return vec4(color, 1);
 }
 
 bool raySphereIntersect(in vec3 start, in vec3 direction, in vec3 sphereCenter, in float sphereR, out vec3 newPoint) {
@@ -59,6 +61,6 @@ void main(void)
     vec3 intersection = vec3(0);
     bool isIntersect = raySphereIntersect(eye, u, center, radius, intersection);
 
-    vec4 resultColor = isIntersect ? vec4(1): vec4(0);
+    vec4 resultColor = isIntersect ? vec4(1): getColorFromEnvironment(u);
     fragColor = resultColor;
 }
