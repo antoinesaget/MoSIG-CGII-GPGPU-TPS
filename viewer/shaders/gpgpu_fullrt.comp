@@ -45,8 +45,16 @@ layout (std430, binding = 4) buffer Meshes
 };
 
 bool intersectBoundingBox(vec4 origin, vec4 dir) {
-	// TODO
-    return false;
+	vec3 tmin_tmp = (bbmin - origin.xyz) / dir.xyz;
+	vec3 tmax_tmp = (bbmax - origin.xyz) / dir.xyz;
+    
+    vec3 tmin = min(tmin_tmp, tmax_tmp);
+    vec3 tmax = max(tmin_tmp, tmax_tmp);
+
+    float t_in  = max(max(tmin.x, tmin.y), tmin.z);
+    float t_out = min(min(tmax.x, tmax.y), tmax.z);
+
+    return t_out > 0 && t_out > t_in; // t_out > 0 condition to intersect if inside the AABB but not behind it.
 }
 
 bool intersectTriangle(vec4 origin, vec4 dir, int ptr, out vec4 dist) 
@@ -87,6 +95,9 @@ const int MAX_TRACE = 1;
 
 vec4 trace(vec4 origin, vec4 dir)
 {
+    if (intersectBoundingBox(origin, dir)) {
+        return vec4(1, 0, 0, 0);
+    }
 	// TODO: trace a ray in the scene, see what it intersects, bounce around
     return vec4(1);
 }
