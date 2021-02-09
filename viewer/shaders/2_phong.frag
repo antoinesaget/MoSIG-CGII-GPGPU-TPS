@@ -41,9 +41,9 @@ This function is inspired from the class notes.
 It return a single float and take a single real eta as a parameter.
 Here, for the function to work, eta must be eta_out/eta_in
 */
-float fresnel_real(vec4 half, vec4 outVect, float eta) {
-	float cosTheta = dot(half, outVect);
-	float sinTheta = length(cross(half.xyz, outVect.xyz));
+float fresnel_real(vec4 hhalf, vec4 outVect, float eta) {
+	float cosTheta = dot(hhalf, outVect);
+	float sinTheta = length(cross(hhalf.xyz, outVect.xyz));
 
 	float ci = sqrt(max(eta*eta - sinTheta*sinTheta, 0.0));
 	float Fs = pow((cosTheta - ci) / (cosTheta + ci), 2);
