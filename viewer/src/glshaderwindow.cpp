@@ -438,6 +438,8 @@ void glShaderWindow::createSSBO()
     glBufferData(GL_SHADER_STORAGE_BUFFER, modelMesh->faces.size() * 3 * sizeof(int), &(modelMesh->faces.front()), GL_STATIC_READ);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
     compute_program->bind();
+    compute_program->setUniformValue("noColor", modelMesh->colors.size() == 0);
+
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssbo[0]);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo[1]);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo[2]);

@@ -14,6 +14,7 @@ uniform vec3 bbmax;
 uniform float radius;
 uniform float groundDistance;
 uniform vec3 center;
+uniform bool noColor;
 
 #define MAX_SCENE_BOUNDS    10.0
 #define EPS                 0.000001
@@ -171,9 +172,12 @@ vec4 trace(vec4 origin, vec4 dir)
         hitinfo_t hitinfo;
         // If intersection with a triangle within the bounding box
         if (isIntersected(origin, dir, hitinfo)) {
-            if (directLight(origin, dir, hitinfo)) {
-                // Compute full illumination (green)
-                return vec4(0, 1, 0, 0);
+            vec4 C;
+            if (noColor) {
+                C = vec4(0.2, 0.6, 0.7, 1.0);
+            } else {
+                C = interpolateColor(hitinfo);
+            }
             } else {
                 // Ambiant only (red)
                 return vec4(1, 0, 0, 0);                 
