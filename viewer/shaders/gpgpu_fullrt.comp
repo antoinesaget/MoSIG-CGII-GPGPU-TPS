@@ -140,14 +140,14 @@ bool isIntersectedNotSelfLeaky(vec4 origin, vec4 dir, int self, out hitinfo_t h)
                 tmp.t = dist;
                 tmp.hit_vptr = j;
                 if (abs(dot(dir, interpolateNormal(tmp))) > 0.2) {
-                hit = true;
-                if(dist.x < h.t.x) {
-                    h.t = dist;
-                    h.hit_vptr = j;
+                    hit = true;
+                    if(dist.x < h.t.x) {
+                        h.t = dist;
+                        h.hit_vptr = j;
+                    }
                 }
 			}
 		}
-	}
 	}
 	return hit;
 }
@@ -230,6 +230,9 @@ vec4 trace(vec4 origin, vec4 dir)
 }
 
 layout (local_size_x = 8, local_size_y = 8) in;
+
+// Note 1 : for some bizare reason, this doesn't work with lemmingLowRes.ply
+// Note 2 : the output after the "Shadow rays" step of the practical is not exactly the same as the output form TP1 as now we have self-shadowing. Also the nature of the ray-tracing approach lead to more aliasing than the approach from TP1.
 void main(void) {
     ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = imageSize(framebuffer);
