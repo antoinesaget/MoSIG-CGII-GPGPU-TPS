@@ -73,7 +73,7 @@ bool intersectTriangle(vec4 origin, vec4 dir, int ptr, out vec4 dist)
     vec3 res = (1 / dot(p, e1)) * vec3(dot(q, e2), dot(p, t), dot(q, dir.xyz));
 
     dist = vec4(res, 1 - res.y - res.z);
-    return !(res.x < 0 || (res.y + res.z > 1) || res.y < 0 || res.z < 0);
+    return !(res.x < 0|| (res.y + res.z > 1) || res.y < 0 || res.z < 0); // There is an intersection if the point is inside the triangle and if the intersection is not behind us.
 }
 
 vec4 interpolateNormal(hitinfo_t h)
