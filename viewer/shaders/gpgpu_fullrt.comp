@@ -1,4 +1,5 @@
 #version 430 core
+#define PI 3.1415926538
 
 layout(binding = 0, rgba32f) uniform writeonly image2D framebuffer;
 
@@ -9,6 +10,13 @@ uniform float lightIntensity;
 uniform vec3 lightPosition;
 uniform float shininess;
 uniform float eta;
+uniform float etak; // Imaginary part when eta is complex
+uniform bool blinnPhong;
+
+uniform vec4 reflectivity;
+uniform vec4 edgetint;
+uniform bool is_using_artistic_fresnel;
+
 uniform vec3 bbmin;
 uniform vec3 bbmax;
 uniform float radius;
@@ -175,15 +183,109 @@ bool directLight(vec4 dir_towards_light, vec4 oriented_normal, vec4 intersection
     }
 }
 
-// From TP1
+// ----------------------------------------
+// --------------- From TP1 ---------------
+// ----------------------------------------
 vec4 getAmbiant(float k, vec4 C, float I) {
     return k * C * I;
 }
 
-// From TP1
 vec4 getDiffuse(float k, vec4 C, float I, vec4 n, vec4 L) {
      return k * C * max(dot(n, L), 0.0) * I;
 }
+
+vec3 n_min(vec3 r){
+    return (1-r)/(1+r);
+}
+
+vec3 n_max(vec3 r){
+    return (1+sqrt(r))/(1-sqrt(r)); 
+}
+
+vec3 get_n(vec3 r, vec3 g) {
+     return n_min(r)*g + (1-g)*n_max(r);
+}
+
+vec3 get_k(vec3 r, vec3 n){
+    vec3 nr = (n+1)*(n+1)*r-(n-1)*(n-1);
+    return sqrt(nr/(1-r));
+}
+
+void getEtaForArtisticFresnel(in vec3 reflectivity, in vec3 edgetint, out vec3 eta, out vec3 etak) {
+   vec3 _reflectivity = clamp(reflectivity, vec3(0), vec3(0.99));
+   eta = get_n(_reflectivity, edgetint);
+   etak = get_k(_reflectivity, eta);
+}
+
+vec3 fresnel_dieletric_conductor(vec3 eta, vec3 etak, float cosTheta)
+{  
+   float CosTheta2 = cosTheta * cosTheta;
+   float SinTheta2 = 1.0 - CosTheta2;
+   vec3 Eta2 = eta * eta;
+   vec3 Etak2 = etak * etak;
+
+   vec3 t0 = Eta2 - Etak2 - SinTheta2;
+   vec3 a2plusb2 = sqrt(t0 * t0 + 4.0 * Eta2 * Etak2);
+   vec3 t1 = a2plusb2 + CosTheta2;
+   vec3 a = sqrt(0.5f * (a2plusb2 + t0));
+   vec3 t2 = 2 * a * cosTheta;
+   vec3 Rs = (t1 - t2) / (t1 + t2);
+
+   vec3 t3 = CosTheta2 * a2plusb2 + SinTheta2 * SinTheta2;
+   vec3 t4 = t2 * SinTheta2;   
+   vec3 Rp = Rs * (t3 - t4) / (t3 + t4);
+
+   return 0.5 * (Rp + Rs);
+}
+
+/*
+Return the specular component for Blinn-Phong shading with a fresnel coefficient with a complex eta (a metal).
+*/
+vec4 getSpecular_EtaComplex_Phong_Fresnel(vec4 C, float I, vec4 n, vec4 L, vec4 V, vec3 eta_in, vec3 eta_out, vec3 etak_out, float exponent) {
+    vec3 eta = eta_out / eta_in;
+    vec3 etak = etak_out / eta_in;
+    
+    vec4 H = normalize(V + L);
+    vec4 F = vec4(fresnel_dieletric_conductor(eta, etak, dot(H, L)), 1.0);
+
+    return F * C * pow(max(dot(n, H), 0.0), exponent) * I;
+}
+
+float chiD(float cosTheta) {
+    return step(0.0, cosTheta); // step avoid if statement
+}
+
+float D(float cosTheta, float roughness) {
+	float cosTheta2 = cosTheta*cosTheta;
+	float roughness2 = roughness*roughness;
+	return (roughness2*chiD(cosTheta)) / (PI * pow(cosTheta2 * (roughness2 + (1 - cosTheta2)/(cosTheta2)), 2));
+}
+
+float G(float cosTheta, float roughness) {
+	float cosTheta2 = cosTheta*cosTheta;
+	return 2.0 / (1 + sqrt(1 + roughness*roughness*(1 - cosTheta2)/(cosTheta2)));
+}
+
+/*
+Return the specular component for Cook-Torrance shading with a fresnel coefficient with a triple channel complex eta.
+*/
+vec4 getSpecular_EtaComplex_CookTorrance(vec4 n, vec4 L, vec4 V, vec3 eta_in, vec3 eta_out, vec3 etak_out, float roughness) {
+    vec3 eta = eta_out / eta_in;
+    vec3 etak = etak_out / eta_in;     
+    
+    vec4 H = normalize(V + L);
+    vec4 F = vec4(fresnel_dieletric_conductor(eta, etak, dot(H, L)), 1.0);
+
+    float ndotV = dot(n, V);
+    float ndotL = dot(n, L);
+
+    float Dh = D(dot(H, n), roughness);
+    float G1i = G(ndotV, roughness);
+    float G1o = G(ndotL, roughness);
+
+    return max(F * Dh * G1i * G1o / (4 * ndotV * ndotL), 0); // max is here to prevent negative contribution to the final lighting that look odd.
+}
+// ----------------------------------------
 
 vec4 trace(vec4 origin, vec4 dir)
 {
@@ -193,11 +295,14 @@ vec4 trace(vec4 origin, vec4 dir)
         // If intersection with a triangle within the bounding box
         if (isIntersected(origin, dir, hitinfo)) {
             vec4 C;
-            if (noColor) {
+            if (is_using_artistic_fresnel) {
+                C = reflectivity;
+            } else if (noColor) {
                 C = vec4(0.2, 0.6, 0.7, 1.0);
             } else {
                 C = interpolateColor(hitinfo);
             }
+
 
             // Ambiant 
             float kA = 0.2;
@@ -214,12 +319,28 @@ vec4 trace(vec4 origin, vec4 dir)
             if (directLight(dir_towards_light, oriented_normal, intersection, hitinfo)) {                
                 vec4 n = normal;
                 vec4 L = dir_towards_light;
+                vec4 V = normalize(mat_inverse*vec4(0, 0, 0, 1) - intersection);
                 
                 // Diffuse
                 float kD = 0.8;
                 vec4 diffuse = getDiffuse(kD, C, lightIntensity, n, L);
 
-                return ambiant + diffuse;
+                // Specular
+                vec3 _eta = vec3(eta);
+                vec3 _etak = vec3(etak);
+                if (is_using_artistic_fresnel) {
+                    getEtaForArtisticFresnel(reflectivity.xyz, edgetint.xyz, _eta, _etak);
+                }
+
+                vec4 specular = vec4(0.0);
+                if (blinnPhong) {
+                    specular = getSpecular_EtaComplex_Phong_Fresnel(C, lightIntensity, n, L, V, vec3(1.0), _eta, _etak, shininess);
+                } else {
+                    float roughness = (200 - shininess) / 200;
+                    specular = C * getSpecular_EtaComplex_CookTorrance(n, L, V, vec3(1.0), _eta, _etak, roughness);
+                }
+    
+                return ambiant + diffuse + specular;
             } else {
                 return ambiant;                
             }
