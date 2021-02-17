@@ -148,7 +148,7 @@ bool directLight(vec4 origin, vec4 dir, hitinfo_t h) {
     
     // If the direction toward the light is behind the hemisphere of the oriented normal then it's not directly illuminated
     // This prevent, for example, the inside of the mesh to be illuminated (particularly visible in the teapot model where light can leak behind the model due to the holes between the lid and the pot (see the hemisphere_fix.png image for visual explanation))
-    if (dot(oriented_normal, dir_towards_light) < 0.15) { // The value here should be 0, but taking 0.15 allows to take into account values around 0 (light perpendicular to normal) that are often problematic. This is not realistic but lead to more visually pleasing results and better transition between ambiant / full illimunitation.
+    if (dot(oriented_normal, dir_towards_light) < 0.0) {
         return false;
     }
 
