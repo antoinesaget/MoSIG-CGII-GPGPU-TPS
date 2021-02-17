@@ -78,8 +78,15 @@ bool intersectTriangle(vec4 origin, vec4 dir, int ptr, out vec4 dist)
 
 vec4 interpolateNormal(hitinfo_t h)
 {
-	// TODO
-    return vec4(1);
+	vec4 n1 = normals[indices[h.hit_vptr    ]];
+	vec4 n2 = normals[indices[h.hit_vptr + 1]];
+	vec4 n3 = normals[indices[h.hit_vptr + 2]];
+
+    float c = h.t.w;
+    float alpha = h.t.y;
+    float beta = h.t.z;
+
+	return normalize(n1*c + n2*alpha + n3*beta);
 }
 
 vec4 interpolateColor(hitinfo_t h)
