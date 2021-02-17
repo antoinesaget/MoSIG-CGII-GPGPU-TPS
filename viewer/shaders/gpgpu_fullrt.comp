@@ -92,7 +92,7 @@ vec4 interpolateNormal(hitinfo_t h)
 vec4 interpolateColor(hitinfo_t h)
 {
 	// TODO
-	return vec4(1);
+    return vec4(1);
 }
 
 bool isIntersected(vec4 origin, vec4 dir, out hitinfo_t h)
@@ -114,20 +114,73 @@ bool isIntersected(vec4 origin, vec4 dir, out hitinfo_t h)
 	return hit;
 }
 
+// Function that return true if the ray intersect with a triangle different from the self triangle.
+bool isIntersectedNotSelf(vec4 origin, vec4 dir, int self, out hitinfo_t h)
+{
+    vec4 dist; // stores distance + barycentric coord
+	bool hit = false;
+	h.t.x = radius * MAX_SCENE_BOUNDS;
+	if(intersectBoundingBox(origin, dir)) {
+		for(int j = 0; j < indices.length(); j += 3) {
+			if(j != self && intersectTriangle(origin, dir, j, dist)) {
+                hit = true;
+                if(dist.x < h.t.x) {
+                    h.t = dist;
+                    h.hit_vptr = j;
+                }
+			}
+		}
+	}
+	return hit;
+}
+
 const int MAX_TRACE = 1;
 
 
-vec4 trace(vec4 origin, vec4 dir)
-{
-    if (intersectBoundingBox(origin, dir)) {
-        hitinfo_t hitinfo;
-        if (isIntersected(origin, dir, hitinfo)) {
-            return vec4(hitinfo.t.yzw, 1.0);
-        }
-        // return vec4(1, 0, 0, 0);
+bool directLight(vec4 origin, vec4 dir, hitinfo_t h) {
+    vec4 intersection = origin + h.t.x * dir;
+    vec4 dir_towards_light = normalize(vec4(lightPosition, 1.0) - intersection); 
+    
+    // Normal of the intersected triangle 
+    vec4 normal = interpolateNormal(h);
+    // Oriented normal depending on the ray direction
+    vec4 oriented_normal = normal * sign(dot(-dir, normal));
+    
+    // If the direction toward the light is behind the hemisphere of the oriented normal then it's not directly illuminated
+    // This prevent, for example, the inside of the mesh to be illuminated (particularly visible in the teapot model where light can leak behind the model due to the holes between the lid and the pot (see the hemisphere_fix.png image for visual explanation))
+    if (dot(oriented_normal, dir_towards_light) < 0.15) { // The value here should be 0, but taking 0.15 allows to take into account values around 0 (light perpendicular to normal) that are often problematic. This is not realistic but lead to more visually pleasing results and better transition between ambiant / full illimunitation.
+        return false;
     }
 
-	// TODO: trace a ray in the scene, see what it intersects, bounce around
+    hitinfo_t hitinfo_light;
+    // Send ray towards light source
+    if(isIntersectedNotSelf(intersection, dir_towards_light, h.hit_vptr, hitinfo_light)) {
+        // If intersection with a triangle between the point and the light source
+        // Then no direct light
+        return false;
+    } else {
+        // If nothing between point and light source, then direct light
+        return true;
+    }
+}
+
+vec4 trace(vec4 origin, vec4 dir)
+{
+    // If intersection with the bounding box
+    if (intersectBoundingBox(origin, dir)) {
+        hitinfo_t hitinfo;
+        // If intersection with a triangle within the bounding box
+        if (isIntersected(origin, dir, hitinfo)) {
+            if (directLight(origin, dir, hitinfo)) {
+                // Compute full illumination (green)
+                return vec4(0, 1, 0, 0);
+            } else {
+                // Ambiant only (red)
+                return vec4(1, 0, 0, 0);                 
+            }
+        }
+    }
+
     return vec4(0.8);
 }
 
