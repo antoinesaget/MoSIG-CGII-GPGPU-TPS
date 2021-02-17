@@ -320,7 +320,7 @@ vec4 trace(vec4 origin, vec4 dir)
                 vec4 n = normal;
                 vec4 L = dir_towards_light;
                 vec4 V = normalize(mat_inverse*vec4(0, 0, 0, 1) - intersection);
-                
+
                 // Diffuse
                 float kD = 0.8;
                 vec4 diffuse = getDiffuse(kD, C, lightIntensity, n, L);
@@ -352,8 +352,7 @@ vec4 trace(vec4 origin, vec4 dir)
 
 layout (local_size_x = 8, local_size_y = 8) in;
 
-// Note 1 : for some bizare reason, this doesn't work with lemmingLowRes.ply
-// Note 2 : the output after the "Shadow rays" step of the practical is not exactly the same as the output form TP1 as now we have self-shadowing. Also the nature of the ray-tracing approach lead to more aliasing than the approach from TP1.
+// Note 1 : the output after the "Shadow rays" step of the practical is not exactly the same as the output form TP1 as now we have self-shadowing. Also the nature of the ray-tracing approach lead to more aliasing than the approach from TP1.
 void main(void) {
     ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = imageSize(framebuffer);
