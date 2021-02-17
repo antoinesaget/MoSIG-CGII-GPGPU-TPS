@@ -129,12 +129,12 @@ vec4 getSpecular_EtaReal_Phong_Fresnel(vec4 C, float I, vec4 n, vec4 L, vec4 V, 
 /*
 Return the specular component for Blinn-Phong shading with a fresnel coefficient with a complex eta (a metal).
 */
-vec4 getSpecular_EtaComplex_Phong_Fresnel(vec4 C, float I, vec4 n, vec4 L, vec4 V, float eta_in, float eta_out, float etak_out, float exponent) {
-     float eta = eta_out / eta_in;
-     float etak = etak_out / eta_in;
+vec4 getSpecular_EtaComplex_Phong_Fresnel(vec4 C, float I, vec4 n, vec4 L, vec4 V, vec3 eta_in, vec3 eta_out, vec3 etak_out, float exponent) {
+     vec3 eta = eta_out / eta_in;
+     vec3 etak = etak_out / eta_in;
      
      vec4 H = normalize(V + L);
-     float F = fresnel_dieletric_conductor(eta, etak, dot(H, L));
+     vec4 F = vec4(fresnel_dieletric_conductor(eta, etak, dot(H, L)), 1.0);
 
      return F * C * pow(max(dot(n, H), 0.0), exponent) * I;
 }
@@ -223,18 +223,16 @@ void main( void )
      
      // Specular
      // vec4 specular = getSpecular_EtaReal_Phong_Fresnel(C, lightIntensity, n, L, V, 1.0, eta, shininess);
-     
+     vec3 _eta = vec3(eta);
+     vec3 _etak = vec3(etak);
+     if (is_using_artistic_fresnel) {
+          getEtaForArtisticFresnel(reflectivity.xyz, edgetint.xyz, _eta, _etak);
+     }
+
      vec4 specular = vec4(0.0);
      if (blinnPhong) {
-          specular = getSpecular_EtaComplex_Phong_Fresnel(C, lightIntensity, n, L, V, 1.0, eta, etak, shininess);
+          specular = getSpecular_EtaComplex_Phong_Fresnel(C, lightIntensity, n, L, V, vec3(1.0), _eta, _etak, shininess);
      } else {
-
-          vec3 _eta = vec3(eta);
-          vec3 _etak = vec3(etak);
-          if (is_using_artistic_fresnel) {
-               getEtaForArtisticFresnel(reflectivity.xyz, edgetint.xyz, _eta, _etak);
-          }
-
           float roughness = (200 - shininess) / 200;
           specular = C * getSpecular_EtaComplex_CookTorrance(n, L, V, vec3(1.0), _eta, _etak, roughness);
      }
