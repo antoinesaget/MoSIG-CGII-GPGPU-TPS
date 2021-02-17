@@ -236,7 +236,7 @@ void main( void )
           }
 
           float roughness = (200 - shininess) / 200;
-          specular = getSpecular_EtaComplex_CookTorrance(n, L, V, vec3(1.0), _eta, _etak, roughness);
+          specular = C * getSpecular_EtaComplex_CookTorrance(n, L, V, vec3(1.0), _eta, _etak, roughness);
      }
      
      vec4 finalColor = ambiant + diffuse + specular;
