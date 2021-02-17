@@ -92,8 +92,15 @@ vec4 interpolateNormal(hitinfo_t h)
 
 vec4 interpolateColor(hitinfo_t h)
 {
-	// TODO
-    return vec4(1);
+	vec4 c1 = colors[indices[h.hit_vptr    ]];
+	vec4 c2 = colors[indices[h.hit_vptr + 1]];
+	vec4 c3 = colors[indices[h.hit_vptr + 2]];
+
+    float c = h.t.w;
+    float alpha = h.t.y;
+    float beta = h.t.z;
+
+	return c1*c + c2*alpha + c3*beta;
 }
 
 bool isIntersected(vec4 origin, vec4 dir, out hitinfo_t h)
