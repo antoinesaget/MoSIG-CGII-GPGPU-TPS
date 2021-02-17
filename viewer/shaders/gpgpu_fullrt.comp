@@ -123,7 +123,12 @@ bool isIntersected(vec4 origin, vec4 dir, out hitinfo_t h)
 }
 
 // Function that return true if the ray intersect with a triangle different from the self triangle.
-bool isIntersectedNotSelf(vec4 origin, vec4 dir, int self, out hitinfo_t h)
+// For the intersection to be registered, 
+// the dot product between the normal of the intersecting face and the direction to the light need to be above an arbitrary threshold (0.2).
+// In other words, the intersection is ignored if the normal is too perpendicular to the direction to the light.
+// This is an arbitrary trick done to mitigate issues at the transition between direct/indirect light (see leaky_light.png).
+// Note that this trick is not a real solution to the problem but, for the tested example, lead to better visual results.
+bool isIntersectedNotSelfLeaky(vec4 origin, vec4 dir, int self, out hitinfo_t h)
 {
     vec4 dist; // stores distance + barycentric coord
 	bool hit = false;
@@ -131,6 +136,10 @@ bool isIntersectedNotSelf(vec4 origin, vec4 dir, int self, out hitinfo_t h)
 	if(intersectBoundingBox(origin, dir)) {
 		for(int j = 0; j < indices.length(); j += 3) {
 			if(j != self && intersectTriangle(origin, dir, j, dist)) {
+                hitinfo_t tmp;
+                tmp.t = dist;
+                tmp.hit_vptr = j;
+                if (abs(dot(dir, interpolateNormal(tmp))) > 0.2) {
                 hit = true;
                 if(dist.x < h.t.x) {
                     h.t = dist;
@@ -139,20 +148,14 @@ bool isIntersectedNotSelf(vec4 origin, vec4 dir, int self, out hitinfo_t h)
 			}
 		}
 	}
+	}
 	return hit;
 }
 
 const int MAX_TRACE = 1;
 
 
-bool directLight(vec4 origin, vec4 dir, hitinfo_t h) {
-    vec4 intersection = origin + h.t.x * dir;
-    vec4 dir_towards_light = normalize(vec4(lightPosition, 1.0) - intersection); 
-    
-    // Normal of the intersected triangle 
-    vec4 normal = interpolateNormal(h);
-    // Oriented normal depending on the ray direction
-    vec4 oriented_normal = normal * sign(dot(-dir, normal));
+bool directLight(vec4 dir_towards_light, vec4 oriented_normal, vec4 intersection, hitinfo_t h) {
     
     // If the direction toward the light is behind the hemisphere of the oriented normal then it's not directly illuminated
     // This prevent, for example, the inside of the mesh to be illuminated (particularly visible in the teapot model where light can leak behind the model due to the holes between the lid and the pot (see the hemisphere_fix.png image for visual explanation))
@@ -162,7 +165,7 @@ bool directLight(vec4 origin, vec4 dir, hitinfo_t h) {
 
     hitinfo_t hitinfo_light;
     // Send ray towards light source
-    if(isIntersectedNotSelf(intersection, dir_towards_light, h.hit_vptr, hitinfo_light)) {
+    if(isIntersectedNotSelfLeaky(intersection, dir_towards_light, h.hit_vptr, hitinfo_light)) {
         // If intersection with a triangle between the point and the light source
         // Then no direct light
         return false;
@@ -170,6 +173,16 @@ bool directLight(vec4 origin, vec4 dir, hitinfo_t h) {
         // If nothing between point and light source, then direct light
         return true;
     }
+}
+
+// From TP1
+vec4 getAmbiant(float k, vec4 C, float I) {
+    return k * C * I;
+}
+
+// From TP1
+vec4 getDiffuse(float k, vec4 C, float I, vec4 n, vec4 L) {
+     return k * C * max(dot(n, L), 0.0) * I;
 }
 
 vec4 trace(vec4 origin, vec4 dir)
@@ -185,9 +198,30 @@ vec4 trace(vec4 origin, vec4 dir)
             } else {
                 C = interpolateColor(hitinfo);
             }
+
+            // Ambiant 
+            float kA = 0.2;
+            vec4 ambiant = getAmbiant(kA, C, lightIntensity);
+            
+            vec4 intersection = origin + hitinfo.t.x * dir;
+            vec4 dir_towards_light = normalize(vec4(lightPosition, 1.0) - intersection); 
+    
+            // Normal of the intersected triangle 
+            vec4 normal = interpolateNormal(hitinfo);
+            // Oriented normal depending on the ray direction
+            vec4 oriented_normal = normal * sign(dot(-dir, normal));
+            
+            if (directLight(dir_towards_light, oriented_normal, intersection, hitinfo)) {                
+                vec4 n = normal;
+                vec4 L = dir_towards_light;
+                
+                // Diffuse
+                float kD = 0.8;
+                vec4 diffuse = getDiffuse(kD, C, lightIntensity, n, L);
+
+                return ambiant + diffuse;
             } else {
-                // Ambiant only (red)
-                return vec4(1, 0, 0, 0);                 
+                return ambiant;                
             }
         }
     }
