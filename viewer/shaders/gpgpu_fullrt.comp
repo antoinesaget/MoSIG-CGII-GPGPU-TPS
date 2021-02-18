@@ -24,6 +24,9 @@ uniform float groundDistance;
 uniform vec3 center;
 uniform bool noColor;
 
+uniform mat4 matrix;
+uniform mat4 perspective;
+
 #define MAX_SCENE_BOUNDS    10.0
 #define EPS                 0.000001
 
@@ -52,136 +55,6 @@ layout (std430, binding = 4) buffer Meshes
 {
     int indices[];
 };
-
-bool intersectBoundingBox(vec4 origin, vec4 dir) {
-	vec3 tmin_tmp = (bbmin - origin.xyz) / dir.xyz;
-	vec3 tmax_tmp = (bbmax - origin.xyz) / dir.xyz;
-    
-    vec3 tmin = min(tmin_tmp, tmax_tmp);
-    vec3 tmax = max(tmin_tmp, tmax_tmp);
-
-    float t_in  = max(max(tmin.x, tmin.y), tmin.z);
-    float t_out = min(min(tmax.x, tmax.y), tmax.z);
-
-    return t_out > 0 && t_out > t_in; // t_out > 0 condition to intersect if inside the AABB but not behind it.
-}
-
-bool intersectTriangle(vec4 origin, vec4 dir, int ptr, out vec4 dist) 
-{
-	vec3 v0 = vertices[indices[ptr    ]].xyz;
-	vec3 v1 = vertices[indices[ptr + 1]].xyz;
-	vec3 v2 = vertices[indices[ptr + 2]].xyz;
-
-    vec3 e1 = v1 - v0;
-    vec3 e2 = v2 - v0;
-
-    vec3 t = origin.xyz - v0;
-    vec3 q = cross(t, e1);
-    vec3 p = cross(dir.xyz, e2);
-
-    vec3 res = (1 / dot(p, e1)) * vec3(dot(q, e2), dot(p, t), dot(q, dir.xyz));
-
-    dist = vec4(res, 1 - res.y - res.z);
-    return res.x > 0 && res.y >= 0 && res.z >= 0 && res.y+res.z <= 1; // There is an intersection if the point is inside the triangle and if the intersection is in front of us.
-}
-
-vec4 interpolateNormal(hitinfo_t h)
-{
-	vec4 n1 = normals[indices[h.hit_vptr    ]];
-	vec4 n2 = normals[indices[h.hit_vptr + 1]];
-	vec4 n3 = normals[indices[h.hit_vptr + 2]];
-
-    float c = h.t.w;
-    float alpha = h.t.y;
-    float beta = h.t.z;
-
-	return normalize(n1*c + n2*alpha + n3*beta);
-}
-
-vec4 interpolateColor(hitinfo_t h)
-{
-	vec4 c1 = colors[indices[h.hit_vptr    ]];
-	vec4 c2 = colors[indices[h.hit_vptr + 1]];
-	vec4 c3 = colors[indices[h.hit_vptr + 2]];
-
-    float c = h.t.w;
-    float alpha = h.t.y;
-    float beta = h.t.z;
-
-	return c1*c + c2*alpha + c3*beta;
-}
-
-bool isIntersected(vec4 origin, vec4 dir, out hitinfo_t h)
-{
-    vec4 dist; // stores distance + barycentric coord
-	bool hit = false;
-	h.t.x = radius * MAX_SCENE_BOUNDS;
-	if(intersectBoundingBox(origin, dir)) {
-		for(int j = 0; j < indices.length(); j += 3) {
-			if(intersectTriangle(origin, dir, j, dist)) {
-                hit = true;
-                if(dist.x < h.t.x) {
-                    h.t = dist;
-                    h.hit_vptr = j;
-                }
-			}
-		}
-	}
-	return hit;
-}
-
-// Function that return true if the ray intersect with a triangle different from the self triangle.
-// For the intersection to be registered, 
-// the dot product between the normal of the intersecting face and the direction to the light need to be above an arbitrary threshold (0.2).
-// In other words, the intersection is ignored if the normal is too perpendicular to the direction to the light.
-// This is an arbitrary trick done to mitigate issues at the transition between direct/indirect light (see leaky_light.png).
-// Note that this trick is not a real solution to the problem but, for the tested example, lead to better visual results.
-bool isIntersectedNotSelfLeaky(vec4 origin, vec4 dir, int self, out hitinfo_t h)
-{
-    vec4 dist; // stores distance + barycentric coord
-	bool hit = false;
-	h.t.x = radius * MAX_SCENE_BOUNDS;
-	if(intersectBoundingBox(origin, dir)) {
-		for(int j = 0; j < indices.length(); j += 3) {
-			if(j != self && intersectTriangle(origin, dir, j, dist)) {
-                hitinfo_t tmp;
-                tmp.t = dist;
-                tmp.hit_vptr = j;
-                if (abs(dot(dir, interpolateNormal(tmp))) > 0.2) {
-                    hit = true;
-                    if(dist.x < h.t.x) {
-                        h.t = dist;
-                        h.hit_vptr = j;
-                    }
-                }
-			}
-		}
-	}
-	return hit;
-}
-
-const int MAX_TRACE = 1;
-
-
-bool directLight(vec4 dir_towards_light, vec4 oriented_normal, vec4 intersection, hitinfo_t h) {
-    
-    // If the direction toward the light is behind the hemisphere of the oriented normal then it's not directly illuminated
-    // This prevent, for example, the inside of the mesh to be illuminated (particularly visible in the teapot model where light can leak behind the model due to the holes between the lid and the pot (see the hemisphere_fix.png image for visual explanation))
-    if (dot(oriented_normal, dir_towards_light) < 0.0) {
-        return false;
-    }
-
-    hitinfo_t hitinfo_light;
-    // Send ray towards light source
-    if(isIntersectedNotSelfLeaky(intersection, dir_towards_light, h.hit_vptr, hitinfo_light)) {
-        // If intersection with a triangle between the point and the light source
-        // Then no direct light
-        return false;
-    } else {
-        // If nothing between point and light source, then direct light
-        return true;
-    }
-}
 
 // ----------------------------------------
 // --------------- From TP1 ---------------
@@ -238,9 +111,6 @@ vec3 fresnel_dieletric_conductor(vec3 eta, vec3 etak, float cosTheta)
    return 0.5 * (Rp + Rs);
 }
 
-/*
-Return the specular component for Blinn-Phong shading with a fresnel coefficient with a complex eta (a metal).
-*/
 vec4 getSpecular_EtaComplex_Phong_Fresnel(vec4 C, float I, vec4 n, vec4 L, vec4 V, vec3 eta_in, vec3 eta_out, vec3 etak_out, float exponent) {
     vec3 eta = eta_out / eta_in;
     vec3 etak = etak_out / eta_in;
@@ -266,9 +136,6 @@ float G(float cosTheta, float roughness) {
 	return 2.0 / (1 + sqrt(1 + roughness*roughness*(1 - cosTheta2)/(cosTheta2)));
 }
 
-/*
-Return the specular component for Cook-Torrance shading with a fresnel coefficient with a triple channel complex eta.
-*/
 vec4 getSpecular_EtaComplex_CookTorrance(vec4 n, vec4 L, vec4 V, vec3 eta_in, vec3 eta_out, vec3 etak_out, float roughness) {
     vec3 eta = eta_out / eta_in;
     vec3 etak = etak_out / eta_in;     
@@ -286,6 +153,148 @@ vec4 getSpecular_EtaComplex_CookTorrance(vec4 n, vec4 L, vec4 V, vec3 eta_in, ve
     return max(F * Dh * G1i * G1o / (4 * ndotV * ndotL), 0); // max is here to prevent negative contribution to the final lighting that look odd.
 }
 // ----------------------------------------
+// ------ End of functions from TP1 -------
+// ----------------------------------------
+
+bool intersectBoundingBox(vec4 origin, vec4 dir) {
+	vec3 tmin_tmp = (bbmin - origin.xyz) / dir.xyz;
+	vec3 tmax_tmp = (bbmax - origin.xyz) / dir.xyz;
+    
+    vec3 tmin = min(tmin_tmp, tmax_tmp);
+    vec3 tmax = max(tmin_tmp, tmax_tmp);
+
+    float t_in  = max(max(tmin.x, tmin.y), tmin.z);
+    float t_out = min(min(tmax.x, tmax.y), tmax.z);
+
+    return t_out > 0 && t_out > t_in; // t_out > 0 condition to intersect if inside the AABB but not behind it.
+}
+
+bool intersectTriangle(vec4 origin, vec4 dir, int ptr, out vec4 dist) 
+{
+	vec3 v0 = vertices[indices[ptr    ]].xyz;
+	vec3 v1 = vertices[indices[ptr + 1]].xyz;
+	vec3 v2 = vertices[indices[ptr + 2]].xyz;
+
+    vec3 e1 = v1 - v0;
+    vec3 e2 = v2 - v0;
+
+    vec3 t = origin.xyz - v0;
+    vec3 q = cross(t, e1);
+    vec3 p = cross(dir.xyz, e2);
+
+    vec3 res = (1.0 / dot(p, e1)) * vec3(dot(q, e2), dot(p, t), dot(q, dir.xyz));
+
+    dist = vec4(res, 1 - res.y - res.z);
+
+    // There is an intersection if the point is inside the triangle and if the intersection is in front of us.
+    return res.x > 0 && res.y >= 0 && res.z >= 0 && res.y+res.z <= 1; 
+}
+
+vec4 interpolateNormal(hitinfo_t h)
+{
+	vec4 n1 = normals[indices[h.hit_vptr    ]];
+	vec4 n2 = normals[indices[h.hit_vptr + 1]];
+	vec4 n3 = normals[indices[h.hit_vptr + 2]];
+
+    float c = h.t.w;
+    float alpha = h.t.y;
+    float beta = h.t.z;
+
+	return normalize(n1*c + n2*alpha + n3*beta);
+}
+
+vec4 interpolateColor(hitinfo_t h)
+{
+	vec4 c1 = colors[indices[h.hit_vptr    ]];
+	vec4 c2 = colors[indices[h.hit_vptr + 1]];
+	vec4 c3 = colors[indices[h.hit_vptr + 2]];
+
+    float c = h.t.w;
+    float alpha = h.t.y;
+    float beta = h.t.z;
+
+	return c1*c + c2*alpha + c3*beta;
+}
+
+bool isIntersected(vec4 origin, vec4 dir, out hitinfo_t h)
+{
+    vec4 dist; // stores distance + barycentric coord
+	bool hit = false;
+	h.t.x = radius * MAX_SCENE_BOUNDS;
+
+    for(int j = 0; j < indices.length(); j += 3) {
+        if(intersectTriangle(origin, dir, j, dist)) {
+            hit = true;
+            if(dist.x < h.t.x) {
+                h.t = dist;
+                h.hit_vptr = j;
+            }
+        }
+    }
+
+	return hit;
+}
+
+/* 
+Function that return true if the ray intersect with a triangle different from the self triangle.
+
+Also, for the intersection to be registered, the dot product between the normal of the intersecting face 
+and the direction to the light need to be above an arbitrary threshold of 0.2.
+In other words, the intersection is ignored if the normal is too perpendicular to the direction to the light.
+
+This is an arbitrary trick done to mitigate issues at the transition between direct/indirect light (see leaky_light.png).
+Note that this trick is not a real solution to the problem but, for the tested examples, this lead to better visual results. 
+*/
+bool isIntersectedNotSelfLeaky(vec4 origin, vec4 dir, int self, out hitinfo_t h)
+{
+    vec4 dist; // stores distance + barycentric coord
+	bool hit = false;
+	h.t.x = radius * MAX_SCENE_BOUNDS;
+
+    for(int j = 0; j < indices.length(); j += 3) {
+        if(j != self && intersectTriangle(origin, dir, j, dist)) {
+            hitinfo_t tmp;
+            tmp.t = dist;
+            tmp.hit_vptr = j;
+            if (abs(dot(dir, interpolateNormal(tmp))) > 0.2) {
+                hit = true;
+                if(dist.x < h.t.x) {
+                    h = tmp;
+                }
+            }
+        }
+    }
+
+	return hit;
+}
+
+const int MAX_TRACE = 1;
+
+/*
+Given the direction towards the light, the oriented normal of the intersection point, intersection and hitinfo  
+return if there is a direct path from the intersection to the light or not.
+(some variables are redundant but this done in order to limit computing the same value twice) 
+*/
+bool directLight(vec4 dir_towards_light, vec4 oriented_normal, vec4 intersection, hitinfo_t h) {
+    /* 
+    If the direction toward the light is behind the hemisphere of the oriented normal then it's not directly illuminated.
+    This prevent, for example, the inside of the mesh to be illuminated (particularly visible in the teapot model where light can leak behind the model due to the holes between the lid and the pot (see the hemisphere_fix.png image for visual explanation))
+    */
+    if (dot(oriented_normal, dir_towards_light) < 0.0) {
+        return false;
+    }
+
+    hitinfo_t hitinfo_light;
+    // Send ray towards light source
+    if(isIntersectedNotSelfLeaky(intersection, dir_towards_light, h.hit_vptr, hitinfo_light)) {
+        // If intersection with a triangle between the point and the light source
+        // Then no direct light
+        return false;
+    } else {
+        // If nothing between point and light source, then direct light
+        return true;
+    }
+}
 
 vec4 trace(vec4 origin, vec4 dir)
 {
@@ -294,6 +303,8 @@ vec4 trace(vec4 origin, vec4 dir)
         hitinfo_t hitinfo;
         // If intersection with a triangle within the bounding box
         if (isIntersected(origin, dir, hitinfo)) {
+
+            // Find the right color depending on the case.
             vec4 C;
             if (is_using_artistic_fresnel) {
                 C = reflectivity;
@@ -302,7 +313,6 @@ vec4 trace(vec4 origin, vec4 dir)
             } else {
                 C = interpolateColor(hitinfo);
             }
-
 
             // Ambiant 
             float kA = 0.2;
@@ -317,9 +327,152 @@ vec4 trace(vec4 origin, vec4 dir)
             vec4 oriented_normal = normal * sign(dot(-dir, normal));
             
             if (directLight(dir_towards_light, oriented_normal, intersection, hitinfo)) {                
+                // If direct light, compute full illumination.
+
                 vec4 n = normal;
                 vec4 L = dir_towards_light;
                 vec4 V = normalize(mat_inverse*vec4(0, 0, 0, 1) - intersection);
+
+                // Diffuse
+                float kD = 0.8;
+                vec4 diffuse = getDiffuse(kD, C, lightIntensity, n, L);
+
+                // Specular
+                vec3 _eta = vec3(eta);
+                vec3 _etak = vec3(etak);
+                if (is_using_artistic_fresnel) {
+                    getEtaForArtisticFresnel(reflectivity.xyz, edgetint.xyz, _eta, _etak);
+                }
+
+                vec4 specular = vec4(0.0);
+                if (blinnPhong) {
+                    specular = getSpecular_EtaComplex_Phong_Fresnel(C, lightIntensity, n, L, V, vec3(1.0), _eta, _etak, shininess);
+                } else {
+                    float roughness = (200 - shininess) / 200;
+                    specular = C * getSpecular_EtaComplex_CookTorrance(n, L, V, vec3(1.0), _eta, _etak, roughness);
+                }
+    
+                return ambiant + diffuse + specular;
+            } else {
+                // If no direct light, only ambiant lighting.
+                return ambiant;                
+            }
+        }
+    }
+
+    return vec4(0.2);
+}
+
+// --------------------------------------------------------
+// --------------- Function for the ground  ---------------
+// --------------------------------------------------------
+/*
+The implementation of the ground is not very clean and quite limited.
+(for example, the ground take the mesh into account, but the mesh doesn't take the ground into account, 
+this can be tested by putting the light below the ground, the light will leak through it)
+
+I probably took the wrong approach for the ground. 
+So I've separated the functions with the ground (below) from the original functions (above) so that the cleaner original functions are also available.
+*/
+
+/*
+Function that given an origin and direction return true if the ray intersect with the ground. 
+Put in dist the value such that origin + dist * dir is the intersection point.
+*/
+bool intersectGround(vec4 origin, vec4 dir, out float dist) {
+    vec3 n = vec3(0, 1, 0);
+    vec3 Q = vec3(0, - groundDistance, 0);
+    float denom = dot(dir.xyz, n);
+    if (abs(denom) > EPS) {
+        dist = dot(Q - origin.xyz, n)/denom;
+        return dist >= 0;
+    }
+    
+    return false;
+}
+
+bool isIntersectedWithGroundAndTriangles(vec4 origin, vec4 dir, out hitinfo_t h)
+{
+    vec4 dist; // stores distance + barycentric coord
+	bool hit = false;
+	h.t.x = radius * MAX_SCENE_BOUNDS;
+
+    for(int j = 0; j < indices.length(); j += 3) {
+        if(intersectTriangle(origin, dir, j, dist)) {
+            hit = true;
+            if(dist.x < h.t.x) {
+                h.t = dist;
+                h.hit_vptr = j;
+            }
+        }
+    }
+
+    float dist2;
+    if(intersectGround(origin, dir, dist2)) {
+        if(dist2 < h.t.x) {
+            hit = true;
+            h.t = vec4(dist2);
+            // Bad trick here, hit_vptr = -1 will correspond to the ground now
+            h.hit_vptr = -1;
+        }
+    }
+
+	return hit;
+}
+
+vec4 traceWithGround(vec4 origin, vec4 dir)
+{
+    bool ground = false;
+    float dist2;
+    if(intersectGround(origin, dir, dist2)) {
+        ground = true;
+    }
+    // If intersection with the first mesh
+    if (ground || intersectBoundingBox(origin, dir)) {
+        hitinfo_t hitinfo;
+        // If intersection with a triangle within the bounding box
+        bool isIntersect = isIntersectedWithGroundAndTriangles(origin, dir, hitinfo);
+        if (ground || isIntersect) {
+            if (ground && !isIntersect) {
+                hitinfo.t = vec4(dist2);
+                hitinfo.hit_vptr = -1;
+            }
+
+            vec4 C;
+            if (hitinfo.hit_vptr == -1) {
+                vec4 intersection = origin + hitinfo.t.x * dir;
+                C = texture(colorTexture, intersection.xz/10.0);
+            } else {
+                if (is_using_artistic_fresnel) {
+                    C = reflectivity;
+                } else if (noColor) {
+                    C = vec4(0.2, 0.6, 0.7, 1.0);
+                } else {
+                    C = interpolateColor(hitinfo);
+                }
+            }
+
+            // Ambiant 
+            float kA = 0.2;
+            vec4 ambiant = getAmbiant(kA, C, lightIntensity);
+            
+            vec4 intersection = origin + hitinfo.t.x * dir;
+            vec4 dir_towards_light = normalize(vec4(lightPosition, 1.0) - intersection); 
+    
+            // Normal of the intersected triangle 
+            vec4 normal;
+            if (hitinfo.hit_vptr == -1) {
+                normal = vec4(0, 1, 0, 0);
+            } else {
+                normal = interpolateNormal(hitinfo);
+            }
+            // Oriented normal depending on the ray direction
+            vec4 oriented_normal = normal * sign(dot(-dir, normal));
+            
+            if (directLight(dir_towards_light, oriented_normal, intersection, hitinfo)) {                
+                vec4 n = normal;
+                vec4 L = dir_towards_light;
+                vec4 V = normalize(origin - intersection);
 
                 // Diffuse
                 float kD = 0.8;
@@ -347,12 +500,20 @@ vec4 trace(vec4 origin, vec4 dir)
         }
     }
 
-    return vec4(0.8);
+    return vec4(0.2);
 }
+
+// ----------------------------------------
+// ------ End of ground functions ---------
+// ----------------------------------------
 
 layout (local_size_x = 8, local_size_y = 8) in;
 
 // Note 1 : the output after the "Shadow rays" step of the practical is not exactly the same as the output form TP1 as now we have self-shadowing. Also the nature of the ray-tracing approach lead to more aliasing than the approach from TP1.
+// Note 2 : as no bounding volume hierarchy is implemented and as the code is note well optimized, I advise the use of small models
+// Note 3 : the code for the ground is not very clean so the original version of the code without the ground is also available
+// Note 4 : the last part of the practical (Indirect Lighting) has not be implemented.
+
 void main(void) {
     ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = imageSize(framebuffer);
@@ -372,7 +533,10 @@ void main(void) {
     // Step 2: ray direction:
     vec4 dir = normalize((mat_inverse * worldPos));
     vec4 eye = (mat_inverse * vec4(0, 0, 0, 1));
-    vec4 color = trace(eye, dir);
+    
+    vec4 color = traceWithGround(eye, dir);
+    // uncomment for original trace without ground.
+    // vec4 color = trace(eye, dir);
 
     imageStore(framebuffer, pix, color);
 }

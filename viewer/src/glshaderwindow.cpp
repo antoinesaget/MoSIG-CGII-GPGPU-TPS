@@ -1288,6 +1288,8 @@ void glShaderWindow::render()
         compute_program->setUniformValue("reflectivity", reflectivity);
         compute_program->setUniformValue("edgetint", edgetint);
         compute_program->setUniformValue("is_using_artistic_fresnel", is_using_artistic_fresnel);
+        compute_program->setUniformValue("matrix", m_matrix[0]);
+        compute_program->setUniformValue("perspective", m_perspective);
         compute_program->setUniformValue("framebuffer", 2);
         compute_program->setUniformValue("colorTexture", 0);
 		glBindImageTexture(2, computeResult->textureId(), 0, false, 0, GL_WRITE_ONLY, GL_RGBA32F);
