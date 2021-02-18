@@ -94,7 +94,7 @@ vec4 colorAtIntersection(vec3 p, vec3 In, vec3 center, float radius, float eta1,
         vec4 C = vec4(1); // Color of the sphere
         // F[0] = 1.0; // Uncomment to get a classic 100% reflexive metal sphere
 
-        return mix(C, getColorFromEnvironment(reflected[0]), F[0]); // The color of the pixel is a mix between the color of the sphere and the reflected ray modulated by the fresnel coefficient.
+        return getColorFromEnvironment(reflected[0]) * F[0]; // The color of the pixel is a mix between the color of the sphere and the reflected ray modulated by the fresnel coefficient.
     } else { // When the sphere is transparent we have to compute multiple bounces
         // Computing the bounces
         for (int i = 1; i < N_BOUNCES; i++) {
